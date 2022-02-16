@@ -1,0 +1,162 @@
+@font-face {
+  font-family: "Christmas Font";
+  src: url('font/Christmas Time Personal Use.ttf') format("truetype");
+}
+
+.App {
+  display: flex;
+  text-align: center;
+}
+
+body{margin:0;height:100%;}
+canvas{
+  position:fixed;top:0;left:0;
+  background-image: linear-gradient(bottom, rgb(105,173,212) 0%, rgb(23,82,145) 84%);
+  background-image: -o-linear-gradient(bottom, rgb(105,173,212) 0%, rgb(23,82,145) 84%);
+  background-image: -moz-linear-gradient(bottom, rgb(105,173,212) 0%, rgb(23,82,145) 84%);
+  background-image: -webkit-linear-gradient(bottom, rgb(105,173,212) 0%, rgb(23,82,145) 84%);
+  background-image: -ms-linear-gradient(bottom, rgb(105,173,212) 0%, rgb(23,82,145) 84%);
+
+  background-image: -webkit-gradient(
+          linear,
+          left bottom,
+          left top,
+          color-stop(0, rgb(105,173,212)),
+          color-stop(0.84, rgb(23,82,145))
+  );
+}
+
+.blob {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  position: absolute;
+  left: 50%;
+  margin-top: 50px;
+  margin-left: -150px;
+  width: 300px;
+  color: #fff;
+}
+
+.logo {
+  border-radius: 100px;
+  box-shadow: 0 14px 28px rgba(0,0,0,0.25), 0 10px 10px rgba(0,0,0,0.22);
+  transition-duration: 500ms;
+}
+
+h1 {
+  font-weight: normal;
+  font-size: 3em;
+  font-family: "Christmas Font", Verdana, Tahoma;
+  color: white;
+  margin-bottom: 0;
+}
+
+h2 {
+  font-weight: normal;
+  font-size: 2.2em;
+  font-family: "Christmas Font", Verdana, Tahoma;
+  color: white;
+  margin-bottom: 0;
+}
+
+.textInput {
+  bottom: 0;
+  width: 100%;
+  clear: both;
+  border: none;
+  background: transparent;
+  color: white;
+  margin-bottom: 10px;
+  text-align: center;
+  font-size: 25px;
+}
+
+input:focus {
+  outline: none;
+}
+
+input::placeholder {
+  color: white;
+  font-size: 25px;
+}
+
+.containerButtons {
+  display: flex;
+  width: 300px;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+button {
+  margin: 20px 0px;
+  outline: none;
+  height: 40px;
+  text-align: center;
+  width: 130px;
+  border-radius: 40px;
+  background: #fff;
+  border: 2px solid #21c4e8;
+  color: #21c4e8;
+  letter-spacing: 1px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  -webkit-transition: all 0.25s ease;
+  transition: all 0.25s ease;
+}
+button:hover {
+  color: white;
+  background: #21c4e8;
+}
+button:active {
+  letter-spacing: 2px;
+}
+
+.backButton {
+  width: 80px;
+  font-weight: normal;
+  font-size: 27px;
+  position: fixed;
+  left: 30px;
+  top: 30px;
+}
+
+.searchContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow-y: scroll;
+}
+
+.groupToJoin {
+  width: 200px;
+  text-align: center;
+  padding: 10px;
+  border-radius: 40px;
+  background: #21c4e8;
+  border: 2px solid #fff;
+  color: #fff;
+  letter-spacing: 1px;
+  font-size: 15px;
+  font-weight: bold;
+  cursor: pointer;
+  -webkit-transition: all 0.25s ease;
+  transition: all 0.25s ease;
+  margin: 5px;
+}
+.groupToJoin:hover {
+  color: #21c4e8;
+  border: 2px solid #21c4e8;
+  background: white;
+}
+.groupToJoin:active {
+  letter-spacing: 2px;
+}
+
+.active {
+  color: #21c4e8;
+  background: white;
+  border: 2px solid #21c4e8;
+}
