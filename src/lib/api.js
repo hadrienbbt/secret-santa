@@ -23,7 +23,12 @@ class Api {
   }
 
   static xhr(route, params, verb) {
-    const domain = 'fedutia.fr/secret-santa'
+    let domain
+    if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
+        domain = 'localhost:8080'
+    } else {
+        domain = 'secret-santa.fedutia.fr/'
+    }
     const url = `https://${domain}${route}`
     let options = Object.assign({ method: verb }, params ? { body: JSON.stringify(params) } : null );
     options.headers = Api.headers()
