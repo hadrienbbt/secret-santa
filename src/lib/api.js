@@ -27,7 +27,7 @@ class Api {
     if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
         domain = 'localhost:8080'
     } else {
-        domain = 'secret-santa.fedutia.fr/'
+        domain = 'secret-santa.fedutia.fr'
     }
     const url = `https://${domain}${route}`
     let options = Object.assign({ method: verb }, params ? { body: JSON.stringify(params) } : null );
