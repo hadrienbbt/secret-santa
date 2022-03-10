@@ -1,11 +1,8 @@
-/**
- * Created by hadrien on 22/11/2017.
- */
-
 'use strict'
 
 require('./response.js')
 
+const port = process.env.PORT || 8080
 const https = require('https')
 const nodemailerKey = require('./.keys/nodemailer.json')
 const mongojs = require('mongojs')
@@ -26,6 +23,14 @@ const transporter = nodemailer.createTransport({
         user: nodemailerKey.fedutia_user,
         pass: nodemailerKey.fedutia_pass,
     }
+})
+
+transporter.verify(function (error, success) {
+  if (error) {
+      console.log("Error: " + error);
+  } else {
+      console.log("SMTP Server ready to send emails");
+  }
 })
 
 const mailOptions = ({ to, html }) => ({
@@ -200,14 +205,6 @@ const ServeHome = (req, res) => {
         .pipe(res)
 }
 
-transporter.verify(function (error, success) {
-    if (error) {
-        console.log("Error: " + error);
-    } else {
-        console.log("Server is ready to take our messages");
-    }
-})
-
 const secretSanta = {
     ServeHome,
     SearchPendingGroups,
@@ -245,4 +242,4 @@ const options = {
 
 https
     .createServer(options, app)
-    .listen(nodemailerKey.port, _ => console.log('Listening https on port ' + nodemailerKey.port))
+    .listen(port, _ => console.log('Listening https on port ' + port))
