@@ -7,6 +7,14 @@ const https = require('https')
 const nodemailerKey = require('./.keys/nodemailer.json')
 const mongojs = require('mongojs')
 const fs = require('fs')
+const admin = require('firebase-admin')
+const serviceAccount = require('./.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json')
+admin.initializeApp({
+credential: admin.credential.cert(serviceAccount)
+})
+const firestore = admin.firestore()
+const { FieldValue } = admin.firestore
+    
 const ObjectID = mongojs.ObjectID
 const mongo = mongojs(process.env.MONGO_URL || `mongodb://localhost:27017/secret-santa`)
 const groups = mongo.collection('groups')
@@ -129,13 +137,25 @@ const SendSecretSantaEmails = (req, res) => {
 
 const CreatePendingGroup = (req, res, next) => {
     const { groupName, name, email } = req.body
-    pending_groups.insert({
-        name: groupName,
-        users: [{ name, email }]
-    }, (err, group) => {
-        req.body._id = group._id
-        next()
-    })
+
+    firestore
+        .collection('pending')
+        .doc()
+        .set({ 
+            name: groupName,
+            users: [{ name, email }]
+        })
+        .then(() => {
+            console.log('Pending group saved to firestore')
+            pending_groups.insert({
+                name: groupName,
+                users: [{ name, email }]
+            }, (err, group) => {
+                req.body._id = group._id
+                next()
+            })
+        })
+        .catch(error => console.log(error))
 }
 
 const SendGroupCreatedEmail = (req, res) => {
