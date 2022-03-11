@@ -23,7 +23,7 @@ class App extends Component {
                 height: window.height,
             },
             navigationStack: [{
-                _id: 'MENU'
+                id: 'MENU'
             }],
             create: '',
             join: {
@@ -153,7 +153,7 @@ class App extends Component {
 
     popRoute = () => {
         const newStack = this.state.navigationStack.filter((_,i) => i !== this.state.navigationStack.length -1),
-            logoStyle = newStack[newStack.length-1]._id === 'MENU' ? {
+            logoStyle = newStack[newStack.length-1].id === 'MENU' ? {
                 width: '200px',
             } : {
                 width: '100px',
@@ -188,7 +188,7 @@ class App extends Component {
                 navigationStack: [
                     ...this.state.navigationStack,
                     {
-                        _id: action
+                        id: action
                     }
                 ]
             })
@@ -205,7 +205,7 @@ class App extends Component {
                 email: this.state.user.email,
             }
             console.log(params)
-            Api.put('/pending-group', params)
+            Api.post('/pending-group', params)
                 .then(result => console.log(result))
         }
     }
@@ -219,22 +219,22 @@ class App extends Component {
                 text: text
             }
             console.log(params)
-            Api.post('/group', params)
+            Api.get('/group', params)
                 .then(groups => this.setState({join: {...this.state.join, results: groups}}))
         }
     }
 
-    setGroupToJoin = _id => this.setState({
+    setGroupToJoin = id => this.setState({
         join: {
             ...this.state.join,
-            id_selected: _id
+            id_selected: id
         }
     })
 
     joinGroup = () => {
         if (this.state.join.id_selected) {
             const params = {
-                _id: this.state.join.id_selected,
+                id: this.state.join.id_selected,
                 name: this.state.user.name,
                 email: this.state.user.email,
             }
@@ -251,11 +251,11 @@ class App extends Component {
             <div className="App">
                 <canvas ref="canvas" id="canvas" />
                 <div className="blob">
-                    {this.state.navigationStack.length > 1 && !currentView._id.includes('SEND') ? (
+                    {this.state.navigationStack.length > 1 && !currentView.id.includes('SEND') ? (
                         <button onClick={this.onClickButton.bind(this,'BACK')} className="backButton">&larr;</button>
                     ) : null}
                     <img style={this.state.logoStyle} src={logo} alt="santa" className="logo" />
-                    {currentView._id === 'MENU' ? (
+                    {currentView.id === 'MENU' ? (
                         <div>
                             <h1>Secret 9Santa</h1>
                             <input
@@ -280,7 +280,7 @@ class App extends Component {
                                 </div>
                             ) : <div />}
                         </div>
-                    ) : currentView._id === 'CREATE' ? (
+                    ) : currentView.id === 'CREATE' ? (
                         <div>
                             <h1>Create a group</h1>
                             <input
@@ -292,7 +292,7 @@ class App extends Component {
                             />
                             {this.state.create.length > 1 ? <button onClick={this.onClickButton.bind(this,'SEND_CREATE','200px')}>Create</button> : null}
                         </div>
-                    ) : currentView._id === 'JOIN' ? (
+                    ) : currentView.id === 'JOIN' ? (
                         <div>
                             <h1>Join a group</h1>
                             <input
@@ -305,8 +305,8 @@ class App extends Component {
                             {this.state.join.results.length ? (
                                 <div className="searchContainer">
                                     {this.state.join.results.map((group,i) => (
-                                        <div onClick={this.setGroupToJoin.bind(this,group._id)}
-                                             className={this.state.join.id_selected === group._id ? 'groupToJoin active' : 'groupToJoin'}
+                                        <div onClick={this.setGroupToJoin.bind(this,group.id)}
+                                             className={this.state.join.id_selected === group.id ? 'groupToJoin active' : 'groupToJoin'}
                                              key={i} >
                                             {group.name}
                                         </div>
@@ -315,7 +315,7 @@ class App extends Component {
                             ) : null}
                             {this.state.join.id_selected ? <button onClick={this.onClickButton.bind(this,'SEND_JOIN','200px')}>Join</button> : null}
                         </div>
-                    ) : currentView._id.includes('SEND') ? <h2>3Check your emails 3</h2>
+                    ) : currentView.id.includes('SEND') ? <h2>3Check your emails 3</h2>
                     : <div />}
                 </div>
             </div>

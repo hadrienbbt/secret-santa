@@ -3,22 +3,18 @@
 require('./response.js')
 
 const port = process.env.PORT || 8080
+const http = require('http')
 const https = require('https')
 const nodemailerKey = require('./.keys/nodemailer.json')
-const mongojs = require('mongojs')
 const fs = require('fs')
 const admin = require('firebase-admin')
 const serviceAccount = require('./.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json')
 admin.initializeApp({
-credential: admin.credential.cert(serviceAccount)
+    credential: admin.credential.cert(serviceAccount)
 })
 const firestore = admin.firestore()
 const { FieldValue } = admin.firestore
-    
-const ObjectID = mongojs.ObjectID
-const mongo = mongojs(process.env.MONGO_URL || `mongodb://localhost:27017/secret-santa`)
-const groups = mongo.collection('groups')
-const pending_groups = mongo.collection('pending_groups')
+
 const nodemailer = require('nodemailer')
 const transporter = nodemailer.createTransport({
     host: nodemailerKey.fedutia_smtp,
@@ -34,11 +30,11 @@ const transporter = nodemailer.createTransport({
 })
 
 transporter.verify(function (error, success) {
-  if (error) {
-      console.log("Error: " + error);
-  } else {
-      console.log("SMTP Server ready to send emails");
-  }
+    if (error) {
+        console.log("Error: " + error);
+    } else {
+        console.log("SMTP Server ready to send emails");
+    }
 })
 
 const mailOptions = ({ to, html }) => ({
@@ -56,13 +52,13 @@ const getRandomInt = (min, max) => {
 }
 
 const getGiversLeft = (users, assigned) => users
-    .reduce((usersLeft, user) => assigned.includes(user._id) ? usersLeft : [
+    .reduce((usersLeft, user) => assigned.includes(user.id) ? usersLeft : [
         ...usersLeft,
         user
     ], [])
 
 const assignReceiver = (giver, users) => {
-    let index_giver = users.findIndex(({ _id }) => giver._id === _id)
+    let index_giver = users.findIndex(({ id }) => giver.id === id)
     do {
         var i = getRandomInt(0, users.length)
     } while (i === index_giver)
@@ -77,12 +73,12 @@ const algoDispatching = users => {
                 let giversLeft = getGiversLeft(users, assigned)
 
                 // Case where the last to receive and the last to give are the same persons :(
-                if (giversLeft.length === 1 && giversLeft[0]._id === users[users.length - 1]._id) {
+                if (giversLeft.length === 1 && giversLeft[0].id === users[users.length - 1].id) {
                     lastIsAlone = true
                     return user
                 } else {
                     let nextToAssign = assignReceiver(user, giversLeft)
-                    assigned.push(nextToAssign._id)
+                    assigned.push(nextToAssign.id)
                     return {
                         giver: user,
                         receiver: nextToAssign
@@ -100,28 +96,42 @@ const userIsInPendingGroup = (email, group) => group.users
 
 // Route function
 const RequestDispatch = (req, res, next) => {
-    const _id = req.param('_id')
-    pending_groups.find({ _id: new ObjectID(_id) }).toArray((err, group) => {
-        if (err || !group[0]) res.respond(new Error('Pas de groupe à cette adresse...'))
-        else if (group[0].users && group[0].users.length < 3) {
-            res.respond({ results: "Pas assez de membres dans le groupe" }, 200)
-        } else {
-            req.body.users = group[0].users
-            pending_groups.remove({ _id: new ObjectID(_id) }, () => next())
-        }
-    })
+    const id = req.query.id
+    firestore
+        .collection('pendings')
+        .doc(id)
+        .get()
+        .then(doc => {
+            if (!doc.exists) {
+                res.respond(new Error('Pas de groupe à cette adresse...'))
+                return
+            }
+            const group = doc.data()
+            req.body.users = group.users.map(user => {
+                const id = firestore.collection('pendings').doc().id
+                return Object.assign(user, { id })
+            })
+            next()
+            firestore
+                .collection('pendings')
+                .doc(id)
+                .delete()
+        })
+        .catch(error => console.log(error))
 }
 
 const DispatchGifters = (req, res, next) => {
     const { users } = req.body
-    users.forEach(user => user._id = new ObjectID())
-
-    var result = algoDispatching(users)
-
-    groups.insert({ result }, () => {
-        req.result = result
-        next()
-    })
+    const result = algoDispatching(users)
+    firestore
+        .collection('groups')
+        .doc()
+        .set({ dispatch: result })
+        .then(() => {
+            req.result = result
+            next()
+        })
+        .catch(error => console.log(error))
 }
 
 const SendSecretSantaEmails = (req, res) => {
@@ -129,38 +139,44 @@ const SendSecretSantaEmails = (req, res) => {
         transporter.sendMail(mailOptions({
             to: giver.email,
             html: 'CACHE CET EMAIL <br /> ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄<br /><br />La personne à qui tu vas offrir un cadeau cette année est ... <b>' + receiver.name + '</b> !'
-        }), (error, info) => error ? Promise.reject() : Promise.resolve())
-    )
+        }), (error, info) => error ? Promise.reject() : Promise.resolve()))
 
-    Promise.all(secret_santa).then(() => res.respond({ results: true }, 200))
+    Promise
+        .all(secret_santa)
+        .then(() => res.respond({ results: true }, 200))
+        .catch(error => console.log(error))
 }
 
 const CreatePendingGroup = (req, res, next) => {
     const { groupName, name, email } = req.body
-
-    firestore
-        .collection('pending')
+    console.log('Saving pending group...')
+    const doc = firestore
+        .collection('pendings')
         .doc()
-        .set({ 
+    doc
+        .set({
+            id: doc.id,
             name: groupName,
             users: [{ name, email }]
         })
         .then(() => {
-            console.log('Pending group saved to firestore')
-            pending_groups.insert({
-                name: groupName,
-                users: [{ name, email }]
-            }, (err, group) => {
-                req.body._id = group._id
-                next()
-            })
+            console.log('Pending group saved')
+            req.body.id = doc.id
+            next()
         })
         .catch(error => console.log(error))
 }
 
+const getLink = (id) => {
+    if (!process.env.NODE_ENV || process.env.NODE_ENV == 'development') {
+        `http://localhost:${port}/dispatch?id=${id}`
+    }
+    return `https://${nodemailerKey.domain}/dispatch?id=${id}`
+}
+
 const SendGroupCreatedEmail = (req, res) => {
-    const { _id, groupName, name, email } = req.body,
-        link = `https://${nodemailerKey.domain}:${nodemailerKey.port}/dispatch?_id=${_id}`
+    const { id, groupName, name, email } = req.body
+    const link = getLink(id)
     transporter.sendMail(mailOptions({
         to: email,
         html: `Bonjour ${name},<br /><br />Ton groupe ${groupName} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !`
@@ -175,45 +191,66 @@ const SendGroupCreatedEmail = (req, res) => {
 }
 
 const SearchPendingGroups = (req, res) => {
-    const { text, email } = req.body
-    console.log(text, email)
-    pending_groups.find().toArray((err, groups) => res.respond({
-        results: groups.filter(g => g.name.toLocaleLowerCase().includes(text.toLowerCase()) && !userIsInPendingGroup(email, g))
-    }, 200))
+    const { text, email } = req.query
+    firestore
+        .collection('pendings')
+        .get()
+        .then(snap => {
+            const groups = snap
+                .docs
+                .map(doc => doc.data())
+                .filter(group => filterGroup(group, text, email))
+            res.respond({ results: groups }, 200)
+        })
+        .catch(error => console.log(error))
+}
+
+const filterGroup = (group, text, email) => {
+    const isIncluded = group.name.toLowerCase().includes(text.toLowerCase())
+    return isIncluded && !userIsInPendingGroup(email, group)
 }
 
 const JoinPendingGroup = (req, res, next) => {
-    const { _id, name, email } = req.body
-    pending_groups.findAndModify({
-        query: { _id: new ObjectID(_id) }, update: {
-            $push: {
-                users: { name, email }
-            }
-        }, new: true
-    }, (err, resp) => {
-        req.goup = resp
-        next()
-    })
+    const { id, name, email } = req.body
+    console.log('Joining pending group...')
+    firestore
+        .collection('pendings')
+        .doc(id)
+        .set({
+            users: FieldValue.arrayUnion({ name, email })
+        }, { merge: true })
+        .then(() => {
+            console.log('Pending group joined')
+            next()
+        })
+        .catch(error => console.log(error))
 }
 
 const SendNewGifterEmail = (req, res) => {
-    const { _id, name, email } = req.body
-    pending_groups.find({ _id: new ObjectID(_id) }).toArray((err, groups) => {
-        const { users } = groups[0],
-            groupName = groups[0].name,
-            creator = users[0],
-            promises_emails = [
+    const { id, name, email } = req.body
+    firestore
+        .collection('pendings')
+        .doc(id)
+        .get()
+        .then(doc => {
+            const group = doc.data()
+            const owner = group.users[0]
+            const proms = [
                 transporter.sendMail(mailOptions({
-                    to: creator.email,
-                    html: `Bonjour ${creator.name},<br /><br />${name} a bien rejoint le groupe ${groupName}.`
-                }), () => Promise.resolve()),
+                    to: owner.email,
+                    html: `Bonjour ${owner.name},<br /><br />${name} a bien rejoint le groupe ${group.name}.`
+                }), Promise.resolve),
                 transporter.sendMail(mailOptions({
                     to: email,
-                    html: `Bonjour ${name},<br /><br />Tu as bien rejoint le groupe ${groupName}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.`
-                }), () => Promise.resolve())
+                    html: `Bonjour ${name},<br /><br />Tu as bien rejoint le groupe ${group.name}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.`
+                }), Promise.resolve)
             ]
-        Promise.all(promises_emails).then(() => res.respond({ results: true }, 200))
-    })
+            Promise
+                .all(proms)
+                .then(() => res.respond({ results: true }, 200))
+                .catch(error => console.log(error))
+        })
+        .catch(error => console.log(error))
 }
 
 // Front-end router
@@ -241,25 +278,31 @@ const express = require('express')
 const bodyParser = require('body-parser')
 const app = express()
 app.use(bodyParser.json({ limit: '50mb' }))
-  .use((req, res, next) => {
-    res.header("Access-Control-Allow-Origin", "*")
-    res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
-    res.header("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PATCH,POST,PUT,OPTIONS")
-    next()
-  })
-  .use(express.static(__dirname + '/build/'))
-  .get('/', secretSanta.ServeHome)
-  .post('/group', secretSanta.SearchPendingGroups)
-  .put('/group', [secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
-  .post('/join', [secretSanta.JoinPendingGroup, secretSanta.SendNewGifterEmail])
-  .put('/pending-group', [secretSanta.CreatePendingGroup, secretSanta.SendGroupCreatedEmail])
-  .get('/dispatch', [secretSanta.RequestDispatch, secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
+    .use((req, res, next) => {
+        res.header("Access-Control-Allow-Origin", "*")
+        res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
+        res.header("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PATCH,POST,PUT,OPTIONS")
+        next()
+    })
+    .use(express.static(__dirname + '/build/'))
+    .get('/', secretSanta.ServeHome)
+    .get('/group', secretSanta.SearchPendingGroups)
+    .post('/group', [secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
+    .post('/join', [secretSanta.JoinPendingGroup, secretSanta.SendNewGifterEmail])
+    .post('/pending-group', [secretSanta.CreatePendingGroup, secretSanta.SendGroupCreatedEmail])
+    .get('/dispatch', [secretSanta.RequestDispatch, secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
 
 const options = {
     cert: fs.readFileSync(nodemailerKey.cert),
     key: fs.readFileSync(nodemailerKey.privkey)
 }
 
-https
-    .createServer(options, app)
-    .listen(port, _ => console.log('Listening https on port ' + port))
+if (!process.env.NODE_ENV || process.env.NODE_ENV == 'development') {
+    http
+        .createServer(app)
+        .listen(port, _ => console.log('Listening http on port ' + port))
+} else {
+    https
+        .createServer(options, app)
+        .listen(port, _ => console.log('Listening https on port ' + port))
+}

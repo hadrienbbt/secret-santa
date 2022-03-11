@@ -6,32 +6,38 @@ class Api {
     }
   }
 
-  static get(route) {
-    return this.xhr(route, null, 'GET');
+  static querify(params) {
+    return Object
+      .keys(params)
+      .map(key => key + '=' + params[key])
+      .join('&')
   }
 
-  static put(route, params) {
-    return this.xhr(route, params, 'PUT')
+  static get(route, params) {
+    const query = `${route}?${Api.querify(params)}`
+    console.log(query)
+    return this.xhr(query, null, 'GET');
   }
 
   static post(route, params) {
     return this.xhr(route, params, 'POST')
   }
 
-  static delete(route, params) {
-    return this.xhr(route, params, 'DELETE')
-  }
-
   static xhr(route, params, verb) {
-    let domain
+    let host
     if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
-        domain = 'localhost:8080'
+      host = 'http://localhost:8080'
     } else {
-        domain = 'secret-santa.fedutia.fr'
+      host = 'https://secret-santa.fedutia.fr'
     }
-    const url = `https://${domain}${route}`
-    let options = Object.assign({ method: verb }, params ? { body: JSON.stringify(params) } : null );
-    options.headers = Api.headers()
+    const url = `${host}${route}`
+    let options = { 
+      method: verb, 
+      headers: Api.headers()
+    }
+    if (params) {
+      options = Object.assign(options, { body: JSON.stringify(params) })
+    }
     return fetch(url, options).then( resp => {
       let json = resp.json();
       if (resp.ok) {
