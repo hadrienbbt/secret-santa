@@ -245,7 +245,6 @@ class App extends Component {
     }
 
     render() {
-        console.log(this.state)
         const currentView = this.state.navigationStack[this.state.navigationStack.length-1]
         return (
             <div className="App">
