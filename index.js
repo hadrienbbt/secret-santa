@@ -298,16 +298,15 @@ app.use(bodyParser.json({ limit: '50mb' }))
     .post('/pending-group', [secretSanta.CreatePendingGroup, secretSanta.SendGroupCreatedEmail])
     .get('/dispatch', [secretSanta.RequestDispatch, secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
 
-const options = {
-    cert: fs.readFileSync(nodemailerKey.cert),
-    key: fs.readFileSync(nodemailerKey.privkey)
-}
-
 if (!process.env.NODE_ENV || process.env.NODE_ENV == 'development') {
     http
         .createServer(app)
         .listen(port, _ => console.log('Listening http on port ' + port))
 } else {
+    const options = {
+        cert: fs.readFileSync(nodemailerKey.cert),
+        key: fs.readFileSync(nodemailerKey.privkey)
+    }
     https
         .createServer(options, app)
         .listen(port, _ => console.log('Listening https on port ' + port))
