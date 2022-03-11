@@ -2,9 +2,9 @@
  * Created by hadrien1 on 08/02/17.
  */
 
-var http = require('http')
+import http from 'http'
 
-http.ServerResponse.prototype.respond = function (content, status) {
+const respond = function (res, content, status) {
     if ('undefined' == typeof status) { // only one parameter found
         if ('number' == typeof content || !isNaN(parseInt(content))) { // usage "respond(status)"
             status = parseInt(content);
@@ -24,5 +24,7 @@ http.ServerResponse.prototype.respond = function (content, status) {
         content = {"result":content};
     }
     // respond with JSON data
-    this.send(JSON.stringify(content)+"\n", status);
+    res.status(status).send(JSON.stringify(content)+"\n")
 }
+
+export default respond

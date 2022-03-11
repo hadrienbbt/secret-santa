@@ -1,21 +1,29 @@
-'use strict'
 
-require('./response.js')
+import { dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+
+import respond from './response.js'
 
 const port = process.env.PORT || 8080
-const http = require('http')
-const https = require('https')
-const nodemailerKey = require('./.keys/nodemailer.json')
-const fs = require('fs')
-const admin = require('firebase-admin')
-const serviceAccount = require('./.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json')
+import http from 'http'
+import https from 'https'
+import fs from 'fs'
+import express from 'express'
+import bodyParser from 'body-parser'
+import nodemailer from 'nodemailer'
+
+import admin from 'firebase-admin'
+const serviceAccount = JSON.parse(fs.readFileSync('./.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json'))
+
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 })
 const firestore = admin.firestore()
 const { FieldValue } = admin.firestore
 
-const nodemailer = require('nodemailer')
+const nodemailerKey = JSON.parse(fs.readFileSync('./.keys/nodemailer.json'))
 const transporter = nodemailer.createTransport({
     host: nodemailerKey.fedutia_smtp,
     port: nodemailerKey.fedutia_smtp_port,
@@ -103,7 +111,7 @@ const RequestDispatch = (req, res, next) => {
         .get()
         .then(doc => {
             if (!doc.exists) {
-                res.respond(new Error('Pas de groupe à cette adresse...'))
+                respond(res, new Error('Pas de groupe à cette adresse...'))
                 return
             }
             const group = doc.data()
@@ -143,7 +151,7 @@ const SendSecretSantaEmails = (req, res) => {
 
     Promise
         .all(secret_santa)
-        .then(() => res.respond({ results: true }, 200))
+        .then(() => respond(res, { results: true }, 200))
         .catch(error => console.log(error))
 }
 
@@ -183,9 +191,9 @@ const SendGroupCreatedEmail = (req, res) => {
     }), (err, result) => {
         if (err) {
             console.log(err)
-            res.respond({ results: false }, 500)
+            respond(res, { results: false }, 500)
         } else {
-            res.respond({ results: true }, 200)
+            respond(res, { results: true }, 200)
         }
     })
 }
@@ -200,7 +208,7 @@ const SearchPendingGroups = (req, res) => {
                 .docs
                 .map(doc => doc.data())
                 .filter(group => filterGroup(group, text, email))
-            res.respond({ results: groups }, 200)
+            respond(res, { results: groups }, 200)
         })
         .catch(error => console.log(error))
 }
@@ -247,7 +255,7 @@ const SendNewGifterEmail = (req, res) => {
             ]
             Promise
                 .all(proms)
-                .then(() => res.respond({ results: true }, 200))
+                .then(() => respond(res, { results: true }, 200))
                 .catch(error => console.log(error))
         })
         .catch(error => console.log(error))
@@ -274,8 +282,6 @@ const secretSanta = {
     DispatchGifters
 }
 
-const express = require('express')
-const bodyParser = require('body-parser')
 const app = express()
 app.use(bodyParser.json({ limit: '50mb' }))
     .use((req, res, next) => {

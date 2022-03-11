@@ -1,7 +1,8 @@
 {
   "name": "secret-santa",
-  "version": "0.1.0",
+  "version": "2.1.0",
   "private": true,
+  "type": "module",
   "dependencies": {
     "body-parser": "^1.19.2",
     "express": "^4.17.2",
