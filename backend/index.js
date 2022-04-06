@@ -1,4 +1,3 @@
-import '@babel/polyfill'
 import 'dotenv/config'
 
 import http from 'http'
