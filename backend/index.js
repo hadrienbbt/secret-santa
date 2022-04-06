@@ -1,39 +1,41 @@
+import '@babel/polyfill'
+import 'dotenv/config'
 
-import { dirname } from 'path'
-import { fileURLToPath } from 'url'
-
-const __dirname = dirname(fileURLToPath(import.meta.url))
-
-import respond from './response.js'
-
-const port = process.env.PORT || 8080
 import http from 'http'
 import https from 'https'
 import fs from 'fs'
 import express from 'express'
 import bodyParser from 'body-parser'
 import nodemailer from 'nodemailer'
-
 import admin from 'firebase-admin'
-const serviceAccount = JSON.parse(fs.readFileSync('./.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json'))
 
+import respond from './response'
+import serviceAccount from '../.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json'
 admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 })
+
+const port = process.env.PORT || 8080
+const smtpHost = process.env.SMTP_HOST || 'localhost'
+const smtpPort = process.env.SMTP_PORT || 25
+const user = process.env.EMAIL_USER || 'user'
+const pwd = process.env.EMAIL_PWD || 'pwd'
+const email = process.env.EMAIL || 'user@example.com'
+const domain = process.env.DOMAIN || 'localhost'
+
 const firestore = admin.firestore()
 const { FieldValue } = admin.firestore
 
-const nodemailerKey = JSON.parse(fs.readFileSync('./.keys/nodemailer.json'))
 const transporter = nodemailer.createTransport({
-    host: nodemailerKey.fedutia_smtp,
-    port: nodemailerKey.fedutia_smtp_port,
+    host: smtpHost,
+    port: smtpPort,
     secure: false,
     tls: {
         rejectUnauthorized: false,
     },
     auth: {
-        user: nodemailerKey.fedutia_user,
-        pass: nodemailerKey.fedutia_pass,
+        user,
+        pass: pwd,
     }
 })
 
@@ -46,7 +48,7 @@ transporter.verify(function (error, success) {
 })
 
 const mailOptions = ({ to, html }) => ({
-    from: `"Santa 🎅" <${nodemailerKey.fedutia_email}>`,
+    from: `"Santa 🎅" <${email}>`,
     to: to,
     subject: `❄️ Secret Santa ${new Date().getFullYear()} ❄️`,
     html: html
@@ -179,7 +181,7 @@ const getLink = (id) => {
     if (!process.env.NODE_ENV || process.env.NODE_ENV == 'development') {
         `http://localhost:${port}/dispatch?id=${id}`
     }
-    return `https://${nodemailerKey.domain}/dispatch?id=${id}`
+    return `https://${domain}/dispatch?id=${id}`
 }
 
 const SendGroupCreatedEmail = (req, res) => {
@@ -303,9 +305,11 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV == 'development') {
         .createServer(app)
         .listen(port, _ => console.log('Listening http on port ' + port))
 } else {
+    const cert = process.env.SSL_CERT
+    const key = process.env.SSL_KEY
     const options = {
-        cert: fs.readFileSync(nodemailerKey.cert),
-        key: fs.readFileSync(nodemailerKey.privkey)
+        cert: fs.readFileSync(cert),
+        key: fs.readFileSync(key)
     }
     https
         .createServer(options, app)

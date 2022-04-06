@@ -108,4 +108,7 @@ dist
 .AppleDouble
 build/
 .vscode/
-package-lock.json
+
+lib/
+.env
+.babelrc
