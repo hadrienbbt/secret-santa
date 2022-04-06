@@ -104,10 +104,13 @@ dist
 .tern-port
 
 # Custom
+.DS_Store
+.AppleDouble/
+
 .keys/
-.AppleDouble
 build/
+lib/
+
+.env
 .vscode/
 
-lib/
-.env
