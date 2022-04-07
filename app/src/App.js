@@ -253,69 +253,71 @@ class App extends Component {
                     {this.state.navigationStack.length > 1 && !currentView.id.includes('SEND') ? (
                         <button onClick={this.onClickButton.bind(this,'BACK')} className="backButton">&larr;</button>
                     ) : null}
-                    <img style={this.state.logoStyle} src={logo} alt="santa" className="logo" />
-                    {currentView.id === 'MENU' ? (
-                        <div>
-                            <h1>Secret 9Santa</h1>
-                            <input
-                                type="text"
-                                className="textInput"
-                                placeholder="Your name"
-                                value={this.state.user.name}
-                                onChange={evt => this.onUserChanged(evt.target.value,this.state.user.email)}
-                            />
-                            <input
-                                type="text"
-                                className="textInput"
-                                placeholder="Your email"
-                                value={this.state.user.email}
-                                onChange={evt => this.onUserChanged(this.state.user.name,evt.target.value)}
-                            />
-                            {this.state.user.isValid ? (
-                                <div className="containerButtons">
-                                    <button onClick={this.onClickButton.bind(this,'CREATE')}>Create</button>
-                                    <div />
-                                    <button onClick={this.onClickButton.bind(this,'JOIN')}>Join</button>
-                                </div>
-                            ) : <div />}
-                        </div>
-                    ) : currentView.id === 'CREATE' ? (
-                        <div>
-                            <h1>Create a group</h1>
-                            <input
-                                type="text"
-                                className="textInput"
-                                placeholder="Group name"
-                                value={this.state.create}
-                                onChange={evt => this.setState({create: evt.target.value})}
-                            />
-                            {this.state.create.length > 1 ? <button onClick={this.onClickButton.bind(this,'SEND_CREATE','200px')}>Create</button> : null}
-                        </div>
-                    ) : currentView.id === 'JOIN' ? (
-                        <div>
-                            <h1>Join a group</h1>
-                            <input
-                                type="text"
-                                className="textInput"
-                                placeholder="Group name"
-                                value={this.state.join.search}
-                                onChange={evt => this.searchGroups(evt.target.value)}
-                            />
-                            {this.state.join.results.length ? (
-                                <div className="searchContainer">
-                                    {this.state.join.results.map((group,i) => (
-                                        <div onClick={this.setGroupToJoin.bind(this,group.id)}
-                                             className={this.state.join.id_selected === group.id ? 'groupToJoin active' : 'groupToJoin'}
-                                             key={i} >
-                                            {group.name}
-                                        </div>
-                                    ))}
-                                </div>
-                            ) : null}
-                            {this.state.join.id_selected ? <button onClick={this.onClickButton.bind(this,'SEND_JOIN','200px')}>Join</button> : null}
-                        </div>
-                    ) : currentView.id.includes('SEND') ? <h2>3Check your emails 3</h2>
-                    : <div />}
+                    <div className='container'>
+                        <img style={this.state.logoStyle} src={logo} alt="santa" className="logo noSelect" />
+                        {currentView.id === 'MENU' ? (
+                            <div>
+                                <h1 className="noSelect">Secret 9Santa</h1>
+                                <input
+                                    type="text"
+                                    className="textInput"
+                                    placeholder="Your name"
+                                    value={this.state.user.name}
+                                    onChange={evt => this.onUserChanged(evt.target.value,this.state.user.email)}
+                                />
+                                <input
+                                    type="text"
+                                    className="textInput"
+                                    placeholder="Your email"
+                                    value={this.state.user.email}
+                                    onChange={evt => this.onUserChanged(this.state.user.name,evt.target.value)}
+                                />
+                                {this.state.user.isValid ? (
+                                    <div className="containerButtons">
+                                        <button onClick={this.onClickButton.bind(this,'CREATE')}>Create</button>
+                                        <div />
+                                        <button onClick={this.onClickButton.bind(this,'JOIN')}>Join</button>
+                                    </div>
+                                ) : <div />}
+                            </div>
+                        ) : currentView.id === 'CREATE' ? (
+                            <div>
+                                <h1 className="noSelect">Create a group</h1>
+                                <input
+                                    type="text"
+                                    className="textInput"
+                                    placeholder="Group name"
+                                    value={this.state.create}
+                                    onChange={evt => this.setState({create: evt.target.value})}
+                                />
+                                {this.state.create.length > 1 ? <button onClick={this.onClickButton.bind(this,'SEND_CREATE','200px')}>Create</button> : null}
+                            </div>
+                        ) : currentView.id === 'JOIN' ? (
+                            <div>
+                                <h1 className="noSelect">Join a group</h1>
+                                <input
+                                    type="text"
+                                    className="textInput"
+                                    placeholder="Group name"
+                                    value={this.state.join.search}
+                                    onChange={evt => this.searchGroups(evt.target.value)}
+                                />
+                                {this.state.join.results.length ? (
+                                    <div className="searchContainer">
+                                        {this.state.join.results.map((group,i) => (
+                                            <div onClick={this.setGroupToJoin.bind(this,group.id)}
+                                                    className={this.state.join.id_selected === group.id ? 'groupToJoin active' : 'groupToJoin'}
+                                                    key={i} >
+                                                {group.name}
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : null}
+                                {this.state.join.id_selected ? <button onClick={this.onClickButton.bind(this,'SEND_JOIN','200px')}>Join</button> : null}
+                            </div>
+                        ) : currentView.id.includes('SEND') ? <h2 className="noSelect">3Check your emails 3</h2>
+                        : <div />}
+                    </div>
                 </div>
             </div>
 
