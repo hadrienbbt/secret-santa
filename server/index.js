@@ -7,6 +7,7 @@ import express from 'express'
 import bodyParser from 'body-parser'
 import nodemailer from 'nodemailer'
 import admin from 'firebase-admin'
+import path from 'path'
 
 import respond from './response'
 import serviceAccount from '../.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json'
@@ -262,17 +263,7 @@ const SendNewGifterEmail = (req, res) => {
         .catch(error => console.log(error))
 }
 
-// Front-end router
-
-const ServeHome = (req, res) => {
-    res.writeHead(200, { "Content-Type": "text/html" })
-
-    fs.createReadStream(__dirname + '/build/index.html')
-        .pipe(res)
-}
-
 const secretSanta = {
-    ServeHome,
     SearchPendingGroups,
     JoinPendingGroup,
     SendNewGifterEmail,
@@ -291,8 +282,10 @@ app.use(bodyParser.json({ limit: '50mb' }))
         res.header("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PATCH,POST,PUT,OPTIONS")
         next()
     })
-    .use(express.static('build'))
-    .get('/', secretSanta.ServeHome)
+    .use(express.static(path.join(__dirname, '../app/build')))
+    .get('/', function (req, res) {
+      res.sendFile(path.join(__dirname, '../app/build', 'index.html'))
+    })
     .get('/group', secretSanta.SearchPendingGroups)
     .post('/group', [secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
     .post('/join', [secretSanta.JoinPendingGroup, secretSanta.SendNewGifterEmail])

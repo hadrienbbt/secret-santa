@@ -1,6 +1,7 @@
 {
   "name": "secret-santa",
   "version": "2.1.0",
+  "private": true,
   "main": "index.js",
   "engines": {
     "node": "16"
@@ -17,18 +18,14 @@
     "react-dom": "^17.0.0"
   },
   "scripts": {
-    "build-backend": "babel backend -d lib",
-    "start-backend": "npm run build-backend && node lib/index.js",
-    "start": "react-scripts start",
-    "build": "npm run build-backend && react-scripts build && mv build lib",
-    "test": "react-scripts test --env=jsdom",
-    "eject": "react-scripts eject"
+    "build": "babel server -d lib",
+    "start": "npm run build && node lib/index.js",
+    "buildall": "npm run build && cd app && npm run build && cd .."
   },
   "devDependencies": {
     "@babel/cli": "^7.17.6",
     "@babel/core": "^7.17.8",
-    "@babel/preset-env": "^7.16.11",
-    "react-scripts": "^4.0.0"
+    "@babel/preset-env": "^7.16.11"
   },
   "browserslist": {
     "production": [

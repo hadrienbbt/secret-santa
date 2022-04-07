@@ -1,7 +1,7 @@
 import React, { Component } from 'react'
 import './App.css'
 
-import Api from './lib/api'
+import Api from './js/api'
 
 import logo from './img/santa.png'
 
@@ -138,8 +138,8 @@ class App extends Component {
         };
 
         canvas.addEventListener("mousemove", function(e) {
-            mX = e.clientX,
-                mY = e.clientY
+            mX = e.clientX
+            mY = e.clientY
         });
 
         window.addEventListener("resize",function(){
