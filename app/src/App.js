@@ -166,10 +166,11 @@ class App extends Component {
     }
 
     onUserChanged = (name,email) => {
+        const trimmedEmail = email.trim()
         this.setState({user: {
             name: name,
-            email: email,
-            isValid: this.isEmailValid(email) && name.length
+            email: trimmedEmail,
+            isValid: this.isEmailValid(trimmedEmail) && name.length
         }})
     }
 
