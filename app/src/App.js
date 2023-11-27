@@ -62,10 +62,8 @@ class App extends Component {
                     x2 = flake.x,
                     y2 = flake.y;
 
-                var dist = Math.sqrt((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y)),
-                    dx = x2 - x,
-                    dy = y2 - y;
-
+                var dist = Math.sqrt((x2 - x) * (x2 - x) + (y2 - y) * (y2 - y))
+                
                 if (dist < minDist) {
                     var force = minDist / (dist * dist),
                         xcomp = (x - x2) / dist,
@@ -175,7 +173,7 @@ class App extends Component {
     }
 
     isEmailValid = email => {
-        let re = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
+        let re = /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/
         return re.test(email)
     }
 
