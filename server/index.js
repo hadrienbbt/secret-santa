@@ -15,7 +15,7 @@ admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 })
 
-const port = process.env.PORT || 8080
+const port = process.env.PORT || 8888
 const smtpHost = process.env.SMTP_HOST || 'localhost'
 const smtpPort = process.env.SMTP_PORT || 25
 const user = process.env.EMAIL_USER || 'user'
@@ -41,7 +41,7 @@ const transporter = nodemailer.createTransport({
 
 transporter.verify(function (error, success) {
     if (error) {
-        console.log("Error: " + error);
+        console.error(error);
     } else {
         console.log("SMTP Server ready to send emails");
     }
@@ -274,6 +274,8 @@ const secretSanta = {
     DispatchGifters
 }
 
+const publicUrl = process.env.PUBLIC_URL || path.join(__dirname, '../app/build')
+
 const app = express()
 app.use(bodyParser.json({ limit: '50mb' }))
     .use((req, res, next) => {
@@ -282,9 +284,9 @@ app.use(bodyParser.json({ limit: '50mb' }))
         res.header("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PATCH,POST,PUT,OPTIONS")
         next()
     })
-    .use(express.static(path.join(__dirname, '../app/build')))
+    .use(express.static(publicUrl))
     .get('/', function (req, res) {
-      res.sendFile(path.join(__dirname, '../app/build', 'index.html'))
+        res.sendFile(path.join(publicUrl, 'index.html'))
     })
     .get('/group', secretSanta.SearchPendingGroups)
     .post('/group', [secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
