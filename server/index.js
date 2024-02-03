@@ -29,7 +29,7 @@ const { FieldValue } = admin.firestore
 const transporter = nodemailer.createTransport({
     host: smtpHost,
     port: smtpPort,
-    secure: false,
+    secure: process.env.SSL_CERT && process.env.SSL_KEY,
     tls: {
         rejectUnauthorized: false,
     },
