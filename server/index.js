@@ -15,13 +15,13 @@ admin.initializeApp({
     credential: admin.credential.cert(serviceAccount)
 })
 
+const domain = process.env.DOMAIN || 'localhost'
 const port = process.env.PORT || 8888
 const smtpHost = process.env.SMTP_HOST || 'localhost'
 const smtpPort = process.env.SMTP_PORT || 25
-const user = process.env.EMAIL_USER || 'user'
-const pwd = process.env.EMAIL_PWD || 'pwd'
-const email = process.env.EMAIL || 'user@example.com'
-const domain = process.env.DOMAIN || 'localhost'
+const smtpUser = process.env.SMTP_USER || 'user'
+const smtpPwd = process.env.SMTP_PWD || 'pwd'
+const senderEmail = process.env.SENDER_EMAIL || 'user@example.com'
 
 const firestore = admin.firestore()
 const { FieldValue } = admin.firestore
@@ -34,8 +34,8 @@ const transporter = nodemailer.createTransport({
         rejectUnauthorized: false,
     },
     auth: {
-        user,
-        pass: pwd,
+        user: smtpUser,
+        pass: smtpPwd,
     }
 })
 
@@ -48,7 +48,7 @@ transporter.verify(function (error, success) {
 })
 
 const mailOptions = ({ to, html }) => ({
-    from: `"Santa 🎅" <${email}>`,
+    from: `"Santa 🎅" <${senderEmail}>`,
     to: to,
     subject: `❄️ Secret Santa ${new Date().getFullYear()} ❄️`,
     html: html
