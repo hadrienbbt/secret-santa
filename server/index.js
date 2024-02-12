@@ -148,7 +148,7 @@ const SendSecretSantaEmails = (req, res) => {
     const secret_santa = req.result.map(({ giver, receiver }) =>
         transporter.sendMail(mailOptions({
             to: giver.email,
-            html: 'CACHE CET EMAIL <br /> ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄<br /><br />La personne à qui tu vas offrir un cadeau cette année est ... <b>' + receiver.name + '</b> !'
+            html: '<html>CACHE CET EMAIL <br /> ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄<br /><br />La personne à qui tu vas offrir un cadeau cette année est ... <b>' + receiver.name + '</b> !</html>'
         }), (error, info) => error ? Promise.reject() : Promise.resolve()))
 
     Promise
@@ -189,7 +189,7 @@ const SendGroupCreatedEmail = (req, res) => {
     const link = getLink(id)
     transporter.sendMail(mailOptions({
         to: email,
-        html: `Bonjour ${name},<br /><br />Ton groupe ${groupName} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !`
+        html: `<html>Bonjour ${name},<br /><br />Ton groupe ${groupName} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !</html>`
     }), (err, result) => {
         if (err) {
             console.log(err)
@@ -248,11 +248,11 @@ const SendNewGifterEmail = (req, res) => {
             const proms = [
                 transporter.sendMail(mailOptions({
                     to: owner.email,
-                    html: `Bonjour ${owner.name},<br /><br />${name} a bien rejoint le groupe ${group.name}.`
+                    html: `<html>Bonjour ${owner.name},<br /><br />${name} a bien rejoint le groupe ${group.name}.</html>`
                 }), Promise.resolve),
                 transporter.sendMail(mailOptions({
                     to: email,
-                    html: `Bonjour ${name},<br /><br />Tu as bien rejoint le groupe ${group.name}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.`
+                    html: `<html>Bonjour ${name},<br /><br />Tu as bien rejoint le groupe ${group.name}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.</html>`
                 }), Promise.resolve)
             ]
             Promise
