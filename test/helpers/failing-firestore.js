@@ -1,7 +1,7 @@
 // A local stand-in for Firestore that rejects every call with
 // PERMISSION_DENIED, which the client does not retry, so reads and writes
 // fail at once instead of after the client's ~40 s of retries.
-const http2 = require('node:http2')
+import http2 from 'node:http2'
 
 const startFailingFirestore = async () => {
   const server = http2.createServer()
@@ -27,4 +27,4 @@ const startFailingFirestore = async () => {
   return state
 }
 
-module.exports = { startFailingFirestore }
+export { startFailingFirestore }

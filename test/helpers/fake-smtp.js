@@ -1,7 +1,7 @@
 // A minimal SMTP server for tests. It accepts any login, records every
 // message it receives, and delivers nothing.
-const net = require('node:net')
-const tls = require('node:tls')
+import net from 'node:net'
+import tls from 'node:tls'
 
 const decodeQuotedPrintable = text => {
   const bytes = []
@@ -120,4 +120,4 @@ const startFakeSmtp = async ({ tls: tlsOptions } = {}) => {
   }
 }
 
-module.exports = { startFakeSmtp, parseMessage }
+export { startFakeSmtp, parseMessage }

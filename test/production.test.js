@@ -3,16 +3,16 @@
 // set. Uses a throwaway self-signed certificate made with openssl, the
 // Firestore emulator and a local TLS fake SMTP server. Skipped unless
 // FIRESTORE_EMULATOR_HOST is set and openssl is available.
-const { test, before, after } = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const https = require('node:https')
-const os = require('node:os')
-const path = require('node:path')
-const { execFileSync } = require('node:child_process')
+import { test, before, after } from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import https from 'node:https'
+import os from 'node:os'
+import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
-const { startFakeSmtp } = require('./helpers/fake-smtp.js')
-const { startServer } = require('./helpers/server.js')
+import { startFakeSmtp } from './helpers/fake-smtp.js'
+import { startServer } from './helpers/server.js'
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST
 const projectId = process.env.GCLOUD_PROJECT || 'demo-secret-santa'

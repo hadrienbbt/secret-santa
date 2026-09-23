@@ -1,14 +1,14 @@
 // Builds the web app the way the production start script does and checks
 // the output the server serves. Skipped when the app's dependencies are not
 // installed (run `npm ci` in app/ first).
-const { test } = require('node:test')
-const assert = require('node:assert/strict')
-const fs = require('node:fs')
-const os = require('node:os')
-const path = require('node:path')
-const { execFileSync } = require('node:child_process')
+import { test } from 'node:test'
+import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { execFileSync } from 'node:child_process'
 
-const appDir = path.join(__dirname, '..', 'app')
+const appDir = path.join(import.meta.dirname, '..', 'app')
 const vite = path.join(appDir, 'node_modules', '.bin', 'vite')
 const skip = !fs.existsSync(vite) && 'app dependencies are not installed'
 

@@ -1,12 +1,12 @@
 // Starts the server against a Firestore stand-in that rejects every call.
 // Runs in the default `npm test`: no emulator or network access is needed,
 // and email goes to a local fake SMTP server.
-const { test, before, after } = require('node:test')
-const assert = require('node:assert/strict')
+import { test, before, after } from 'node:test'
+import assert from 'node:assert/strict'
 
-const { startFailingFirestore } = require('./helpers/failing-firestore.js')
-const { startFakeSmtp } = require('./helpers/fake-smtp.js')
-const { startServer } = require('./helpers/server.js')
+import { startFailingFirestore } from './helpers/failing-firestore.js'
+import { startFakeSmtp } from './helpers/fake-smtp.js'
+import { startServer } from './helpers/server.js'
 
 let firestore
 let smtp

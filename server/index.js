@@ -11,8 +11,8 @@ import { initializeApp, cert } from 'firebase-admin/app'
 import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import path from 'path'
 
-import respond from './response'
-import serviceAccount from '../.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json'
+import respond from './response.js'
+import serviceAccount from '../.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json' with { type: 'json' }
 initializeApp({
     credential: cert(serviceAccount)
 })
@@ -321,7 +321,7 @@ const secretSanta = {
     DispatchGifters
 }
 
-const publicUrl = process.env.PUBLIC_URL || path.join(__dirname, '../app/build')
+const publicUrl = process.env.PUBLIC_URL || path.join(import.meta.dirname, '../app/build')
 
 const app = express()
 app.disable('x-powered-by')

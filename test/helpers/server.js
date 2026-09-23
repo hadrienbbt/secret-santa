@@ -1,15 +1,15 @@
-// Starts the real built server (lib/index.js) in isolation, for tests. It runs
+// Starts the real server (server/index.js) in isolation, for tests. It runs
 // from a temp copy with a throwaway service-account key where index.js expects
 // the real one, so the repo's .keys/ is never read or written. Firestore
 // traffic goes to the emulator and email to a local fake SMTP server.
-const crypto = require('node:crypto')
-const fs = require('node:fs')
-const net = require('node:net')
-const os = require('node:os')
-const path = require('node:path')
-const { spawn } = require('node:child_process')
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import net from 'node:net'
+import os from 'node:os'
+import path from 'node:path'
+import { spawn } from 'node:child_process'
 
-const repoRoot = path.join(__dirname, '..', '..')
+const repoRoot = path.join(import.meta.dirname, '..', '..')
 const loopback = /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/
 
 // A service-account key that looks real but grants nothing anywhere.
@@ -40,10 +40,11 @@ const startServer = async ({ firestoreHost, projectId, smtp, production }) => {
   if (!/^demo-/.test(projectId)) throw new Error('project id must start with demo-')
   if (smtp.host !== '127.0.0.1') throw new Error('SMTP host must be on loopback')
 
-  const entry = fs.readFileSync(path.join(repoRoot, 'lib', 'index.js'), 'utf8')
-  const keyFile = entry.match(/require\("\.\.\/\.keys\/([^"]+\.json)"\)/)[1]
+  const entry = fs.readFileSync(path.join(repoRoot, 'server', 'index.js'), 'utf8')
+  const keyFile = entry.match(/from '\.\.\/\.keys\/([^']+\.json)'/)[1]
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'secret-santa-server-'))
-  fs.cpSync(path.join(repoRoot, 'lib'), path.join(dir, 'lib'), { recursive: true })
+  fs.cpSync(path.join(repoRoot, 'server'), path.join(dir, 'server'), { recursive: true })
+  fs.copyFileSync(path.join(repoRoot, 'package.json'), path.join(dir, 'package.json')) // "type": "module"
   fs.mkdirSync(path.join(dir, '.keys'))
   fs.writeFileSync(path.join(dir, '.keys', keyFile), JSON.stringify(throwawayServiceAccount(projectId)))
   fs.symlinkSync(path.join(repoRoot, 'node_modules'), path.join(dir, 'node_modules'), 'dir')
@@ -53,7 +54,7 @@ const startServer = async ({ firestoreHost, projectId, smtp, production }) => {
 
   const port = await freePort()
   // Minimal environment, run from the temp dir so no .env file is loaded.
-  const child = spawn(process.execPath, [path.join(dir, 'lib', 'index.js')], {
+  const child = spawn(process.execPath, [path.join(dir, 'server', 'index.js')], {
     cwd: dir,
     env: {
       PATH: process.env.PATH,
@@ -102,4 +103,4 @@ const startServer = async ({ firestoreHost, projectId, smtp, production }) => {
   return { url: `${production ? 'https' : 'http'}://127.0.0.1:${port}`, child, output: () => output, stop }
 }
 
-module.exports = { throwawayServiceAccount, startServer }
+export { throwawayServiceAccount, startServer }
