@@ -63,12 +63,18 @@ const call = async (method, route, body) => {
   return { status: response.status, text, json }
 }
 
+// The dispatch link each owner received by email, by group id.
+const dispatchPaths = {}
+
 const createGroup = async (groupName, name, email) => {
   const before = smtp.messages.length
   const response = await call('POST', '/pending-group', { groupName, name, email })
   assert.equal(response.status, 200, response.text)
-  await smtp.waitFor(before + 1)
+  const mails = await smtp.waitFor(before + 1)
   const [pending] = (await listCollection('pendings')).filter(doc => doc.data.name === groupName)
+  const link = mails[before].body.match(/https:\/\/secret-santa\.test(\/dispatch\?id=[A-Za-z0-9]+&token=[0-9a-f]+)/)
+  assert.ok(link, mails[before].body)
+  dispatchPaths[pending.docId] = link[1]
   return pending.docId
 }
 
@@ -113,7 +119,9 @@ test('POST /pending-group creates a group and emails its owner a dispatch link',
   const pendings = await listCollection('pendings')
   assert.equal(pendings.length, 1)
   const [{ docId, data }] = pendings
-  assert.deepEqual(data, { id: docId, name: 'Famille Dupont', users: [{ name: 'Alice', email: 'alice@example.test' }] })
+  const { dispatchToken, ...group } = data
+  assert.deepEqual(group, { id: docId, name: 'Famille Dupont', users: [{ name: 'Alice', email: 'alice@example.test' }] })
+  assert.match(dispatchToken, /^[0-9a-f]{48}$/)
 
   const [mail] = await smtp.waitFor(1)
   assert.deepEqual(mail.to, ['alice@example.test'])
@@ -121,7 +129,7 @@ test('POST /pending-group creates a group and emails its owner a dispatch link',
   assert.match(mail.headers.subject, new RegExp(`Secret Santa ${year}`))
   assert.match(mail.body, /Bonjour Alice/)
   assert.match(mail.body, /Ton groupe Famille Dupont a été créé/)
-  assert.ok(mail.body.includes(`https://secret-santa.test/dispatch?id=${docId}`), mail.body)
+  assert.ok(mail.body.includes(`https://secret-santa.test/dispatch?id=${docId}&token=${dispatchToken}`), mail.body)
 })
 
 test('GET /group finds pending groups by name, leaving out groups the user is in', { skip }, async () => {
@@ -131,7 +139,7 @@ test('GET /group finds pending groups by name, leaving out groups the user is in
   assert.equal(found.status, 200)
   assert.deepEqual(found.json, { results: [{ id, name: 'Famille Dupont' }] })
   // Members' names and email addresses must never leave the server.
-  assert.doesNotMatch(found.text, /Alice|alice@example\.test|users/)
+  assert.doesNotMatch(found.text, /Alice|alice@example\.test|users|dispatchToken/)
 
   const member = await call('GET', '/group?text=dupont&email=alice@example.test')
   assert.deepEqual(member.json, { results: [] })
@@ -163,7 +171,7 @@ test('GET /dispatch draws the exchange, stores it, removes the pending group and
   await joinGroup(id, 'Carol', 'carol@example.test')
   smtp.messages.length = 0
 
-  const response = await call('GET', `/dispatch?id=${id}`)
+  const response = await call('GET', dispatchPaths[id])
   assert.equal(response.status, 200)
   assert.deepEqual(response.json, { results: true })
 
@@ -198,6 +206,44 @@ test('GET /dispatch with an unknown or missing id answers 404', { skip }, async 
     assert.deepEqual(response.json, notFound)
   }
   assert.equal(smtp.messages.length, 0)
+})
+
+test('GET /dispatch needs the secret token from the owner\'s email', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+  await joinGroup(id, 'Bob', 'bob@example.test')
+  smtp.messages.length = 0
+
+  for (const route of [`/dispatch?id=${id}`, `/dispatch?id=${id}&token=${'0'.repeat(48)}`, `/dispatch?id=${id}&token=short`]) {
+    const response = await call('GET', route)
+    assert.equal(response.status, 404, route)
+    assert.deepEqual(response.json, notFound)
+  }
+  assert.equal((await listCollection('pendings')).length, 1)
+  assert.equal((await listCollection('groups')).length, 0)
+  assert.equal(smtp.messages.length, 0)
+
+  const response = await call('GET', dispatchPaths[id])
+  assert.equal(response.status, 200)
+  await smtp.waitFor(2)
+})
+
+test('groups created before dispatch tokens can still be drawn with their id', { skip }, async () => {
+  const user = (name, email) => ({ mapValue: { fields: { name: { stringValue: name }, email: { stringValue: email } } } })
+  const created = await fetch(`${documentsUrl}/pendings?documentId=legacy-group`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: {
+      id: { stringValue: 'legacy-group' },
+      name: { stringValue: 'Groupe de 2023' },
+      users: { arrayValue: { values: [user('Alice', 'alice@example.test'), user('Bob', 'bob@example.test')] } },
+    } }),
+  })
+  assert.equal(created.status, 200)
+
+  const response = await call('GET', '/dispatch?id=legacy-group')
+  assert.equal(response.status, 200)
+  const mails = await smtp.waitFor(2)
+  assert.deepEqual(mails.map(mail => mail.to[0]).sort(), ['alice@example.test', 'bob@example.test'])
 })
 
 test('POST /join to an unknown group answers 404 and stores nothing', { skip }, async () => {
@@ -243,7 +289,7 @@ test('names and group names are escaped in every email', { skip }, async () => {
   const id = await createGroup(groupName, '<b>Mallory</b>', 'mallory@example.test')
   await joinGroup(id, '<img src=x onerror=alert(1)>', 'bob@example.test')
   await joinGroup(id, "Carol & 'Co'", 'carol@example.test')
-  const dispatched = await call('GET', `/dispatch?id=${id}`)
+  const dispatched = await call('GET', dispatchPaths[id])
   assert.equal(dispatched.status, 200)
 
   const mails = await smtp.waitFor(8)

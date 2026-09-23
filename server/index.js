@@ -3,6 +3,7 @@ import 'dotenv/config'
 import http from 'http'
 import https from 'https'
 import fs from 'fs'
+import crypto from 'crypto'
 import express from 'express'
 import bodyParser from 'body-parser'
 import nodemailer from 'nodemailer'
@@ -122,6 +123,14 @@ const fail = (res, error) => {
 
 const groupNotFound = res => respond(res, 'Pas de groupe à cette adresse...', 404)
 
+// Compares a token from a link with the stored one in constant time.
+const sameToken = (given, expected) => {
+    if (typeof given !== 'string') return false
+    const a = Buffer.from(given)
+    const b = Buffer.from(expected)
+    return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
 // Route function
 const RequestDispatch = (req, res, next) => {
     const id = req.query.id
@@ -136,6 +145,14 @@ const RequestDispatch = (req, res, next) => {
                 return
             }
             const group = doc.data()
+            // Group ids are public (the join screen lists them), so a draw
+            // needs the secret token from the owner's email. Groups created
+            // before tokens existed have none; their owners' links only carry
+            // the id, so the id alone still works for them.
+            if (group.dispatchToken && !sameToken(req.query.token, group.dispatchToken)) {
+                groupNotFound(res)
+                return
+            }
             req.body.users = group.users.map(user => {
                 const id = firestore.collection('pendings').doc().id
                 return Object.assign(user, { id })
@@ -183,30 +200,33 @@ const CreatePendingGroup = (req, res, next) => {
     const doc = firestore
         .collection('pendings')
         .doc()
+    const dispatchToken = crypto.randomBytes(24).toString('hex')
     doc
         .set({
             id: doc.id,
             name: groupName,
-            users: [{ name, email }]
+            users: [{ name, email }],
+            dispatchToken
         })
         .then(() => {
             console.log('Pending group saved')
-            req.body.id = doc.id
+            req.createdGroup = { id: doc.id, dispatchToken }
             next()
         })
         .catch(error => fail(res, error))
 }
 
-const getLink = (id) => {
+const getLink = (id, token) => {
     if (!process.env.NODE_ENV || process.env.NODE_ENV == 'development') {
-        `http://${domain}:${port}/dispatch?id=${id}`
+        `http://${domain}:${port}/dispatch?id=${id}&token=${token}`
     }
-    return `https://${domain}/dispatch?id=${id}`
+    return `https://${domain}/dispatch?id=${id}&token=${token}`
 }
 
 const SendGroupCreatedEmail = (req, res) => {
-    const { id, groupName, name, email } = req.body
-    const link = getLink(id)
+    const { groupName, name, email } = req.body
+    const { id, dispatchToken } = req.createdGroup
+    const link = getLink(id, dispatchToken)
     transporter.sendMail(mailOptions({
         to: email,
         html: `<html>Bonjour ${escapeHtml(name)},<br /><br />Ton groupe ${escapeHtml(groupName)} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !</html>`
