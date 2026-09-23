@@ -6,13 +6,14 @@ import fs from 'fs'
 import express from 'express'
 import bodyParser from 'body-parser'
 import nodemailer from 'nodemailer'
-import admin from 'firebase-admin'
+import { initializeApp, cert } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import path from 'path'
 
 import respond from './response'
 import serviceAccount from '../.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json'
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+initializeApp({
+    credential: cert(serviceAccount)
 })
 
 const domain = process.env.DOMAIN || 'localhost'
@@ -23,8 +24,7 @@ const smtpUser = process.env.SMTP_USER || 'user'
 const smtpPwd = process.env.SMTP_PWD || 'pwd'
 const senderEmail = process.env.SENDER_EMAIL || 'user@example.com'
 
-const firestore = admin.firestore()
-const { FieldValue } = admin.firestore
+const firestore = getFirestore()
 
 const transporter = nodemailer.createTransport({
     host: smtpHost,
