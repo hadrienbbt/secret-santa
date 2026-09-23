@@ -200,6 +200,8 @@ const SendGroupCreatedEmail = (req, res) => {
     })
 }
 
+// Returns only what the web app shows: each group's id and name. Members'
+// names and email addresses stay on the server.
 const SearchPendingGroups = (req, res) => {
     const { text, email } = req.query
     firestore
@@ -210,6 +212,7 @@ const SearchPendingGroups = (req, res) => {
                 .docs
                 .map(doc => doc.data())
                 .filter(group => filterGroup(group, text, email))
+                .map(group => ({ id: group.id, name: group.name }))
             respond(res, { results: groups }, 200)
         })
         .catch(error => console.log(error))

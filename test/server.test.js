@@ -129,9 +129,9 @@ test('GET /group finds pending groups by name, leaving out groups the user is in
 
   const found = await call('GET', '/group?text=dupont&email=bob@example.test')
   assert.equal(found.status, 200)
-  assert.deepEqual(found.json, {
-    results: [{ id, name: 'Famille Dupont', users: [{ name: 'Alice', email: 'alice@example.test' }] }],
-  })
+  assert.deepEqual(found.json, { results: [{ id, name: 'Famille Dupont' }] })
+  // Members' names and email addresses must never leave the server.
+  assert.doesNotMatch(found.text, /Alice|alice@example\.test|users/)
 
   const member = await call('GET', '/group?text=dupont&email=alice@example.test')
   assert.deepEqual(member.json, { results: [] })
