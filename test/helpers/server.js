@@ -33,7 +33,9 @@ const freePort = () => new Promise(resolve => {
   })
 })
 
-const startServer = async ({ firestoreHost, projectId, smtp }) => {
+// With `production` ({ certPath, keyPath }), it runs like production: HTTPS,
+// and mail over implicit TLS because SSL_CERT and SSL_KEY are set.
+const startServer = async ({ firestoreHost, projectId, smtp, production }) => {
   if (!loopback.test(firestoreHost)) throw new Error('Firestore host must be on loopback')
   if (!/^demo-/.test(projectId)) throw new Error('project id must start with demo-')
   if (smtp.host !== '127.0.0.1') throw new Error('SMTP host must be on loopback')
@@ -55,7 +57,8 @@ const startServer = async ({ firestoreHost, projectId, smtp }) => {
     cwd: dir,
     env: {
       PATH: process.env.PATH,
-      NODE_ENV: 'development',
+      NODE_ENV: production ? 'production' : 'development',
+      ...(production && { SSL_CERT: production.certPath, SSL_KEY: production.keyPath }),
       PORT: String(port),
       DOMAIN: 'secret-santa.test',
       PUBLIC_URL: publicDir,
@@ -83,7 +86,7 @@ const startServer = async ({ firestoreHost, projectId, smtp }) => {
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`server did not start:\n${output}`)), 15000)
       const check = () => {
-        if (output.includes(`Listening http on port ${port}`) && output.includes('SMTP Server ready')) {
+        if (output.includes(`Listening ${production ? 'https' : 'http'} on port ${port}`) && output.includes('SMTP Server ready')) {
           clearTimeout(timer)
           resolve()
         }
@@ -96,7 +99,7 @@ const startServer = async ({ firestoreHost, projectId, smtp }) => {
     await stop()
     throw error
   }
-  return { url: `http://127.0.0.1:${port}`, child, output: () => output, stop }
+  return { url: `${production ? 'https' : 'http'}://127.0.0.1:${port}`, child, output: () => output, stop }
 }
 
 module.exports = { throwawayServiceAccount, startServer }

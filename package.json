@@ -12,13 +12,13 @@
     "dotenv": "^16.0.0",
     "express": "^4.17.3",
     "firebase-admin": "^14.4.0",
-    "nodemailer": "^6.7.2"
+    "nodemailer": "^10.0.10"
   },
   "scripts": {
     "build": "babel server -d lib",
     "start": "npm run build && node lib/index.js",
     "buildall": "npm run build && cd app && npm run build && cd ..",
-    "test": "npm run build && node --test test/*.test.js",
+    "test": "npm run build && node --test --test-concurrency=1 test/*.test.js",
     "test:emulator": "firebase emulators:exec --only firestore --project demo-secret-santa \"npm test\""
   },
   "devDependencies": {

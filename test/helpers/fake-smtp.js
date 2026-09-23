@@ -1,6 +1,7 @@
 // A minimal SMTP server for tests. It accepts any login, records every
 // message it receives, and delivers nothing.
 const net = require('node:net')
+const tls = require('node:tls')
 
 const decodeQuotedPrintable = text => {
   const bytes = []
@@ -41,10 +42,11 @@ const parseMessage = raw => {
   return { headers, body: text }
 }
 
-const startFakeSmtp = async () => {
+// With `tls` ({ key, cert }), it speaks implicit TLS like port 465.
+const startFakeSmtp = async ({ tls: tlsOptions } = {}) => {
   const messages = []
   const sockets = new Set()
-  const server = net.createServer(socket => {
+  const onConnection = socket => {
     sockets.add(socket)
     socket.on('close', () => sockets.delete(socket))
     socket.setEncoding('utf8')
@@ -95,7 +97,8 @@ const startFakeSmtp = async () => {
         else reply('502 5.5.2 Command not recognized')
       }
     })
-  })
+  }
+  const server = tlsOptions ? tls.createServer(tlsOptions, onConnection) : net.createServer(onConnection)
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   return {
     host: '127.0.0.1',
