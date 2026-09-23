@@ -1,0 +1,14 @@
+rules_version = '2';
+
+// Only the server uses this database, through the Firebase Admin SDK, which
+// security rules do not apply to. The web app only uses Firebase Analytics
+// and reads groups through the server's API. Direct client access is
+// therefore denied, so nobody can read participants' names and emails, or
+// change or delete groups, with the public project id.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
