@@ -20,7 +20,9 @@
   "scripts": {
     "build": "babel server -d lib",
     "start": "npm run build && node lib/index.js",
-    "buildall": "npm run build && cd app && npm run build && cd .."
+    "buildall": "npm run build && cd app && npm run build && cd ..",
+    "test": "npm run build && node --test test/*.test.js",
+    "test:emulator": "firebase emulators:exec --only firestore --project demo-secret-santa \"npm test\""
   },
   "devDependencies": {
     "@babel/cli": "^7.17.6",
