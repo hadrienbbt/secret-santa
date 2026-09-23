@@ -324,8 +324,10 @@ const secretSanta = {
 const publicUrl = process.env.PUBLIC_URL || path.join(__dirname, '../app/build')
 
 const app = express()
+app.disable('x-powered-by')
 app.use(bodyParser.json())
     .use((req, res, next) => {
+        res.header("X-Content-Type-Options", "nosniff")
         res.header("Access-Control-Allow-Origin", "*")
         res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
         res.header("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PATCH,POST,PUT,OPTIONS")

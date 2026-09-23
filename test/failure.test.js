@@ -33,6 +33,14 @@ const call = async (method, route, body) => {
   return { status: response.status, json: JSON.parse(await response.text()) }
 }
 
+test('GET / serves the web app with hardened headers', async () => {
+  const response = await fetch(`${server.url}/`)
+  assert.equal(response.status, 200)
+  assert.match(await response.text(), /test build/)
+  assert.equal(response.headers.get('x-powered-by'), null)
+  assert.equal(response.headers.get('x-content-type-options'), 'nosniff')
+})
+
 test('every route answers 503, and the server keeps running, when Firestore fails', { timeout: 30000 }, async () => {
   const unavailable = { code: 503, status: 'Service Unavailable', message: 'Service unavailable' }
   const requests = [

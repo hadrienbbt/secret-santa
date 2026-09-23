@@ -71,6 +71,7 @@ typings/
 # dotenv environment variables file
 .env
 .env.test
+.env.*
 
 # parcel-bundler cache (https://parceljs.org/)
 .cache
@@ -108,6 +109,12 @@ dist
 .AppleDouble/
 
 .keys/
+
+# Keys and certificates must never be committed
+*.pem
+*.key
+*.p12
+*.pfx
 build/
 lib/
 
