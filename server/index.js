@@ -113,16 +113,26 @@ const userIsInPendingGroup = (email, group) => group.users
         acc ? acc : user.email === email
         , false)
 
+// Answers 503 instead of leaving the request hanging when Firestore or
+// another dependency fails, and never answers twice.
+const fail = (res, error) => {
+    console.log(error)
+    if (!res.headersSent) respond(res, 'Service unavailable', 503)
+}
+
+const groupNotFound = res => respond(res, 'Pas de groupe à cette adresse...', 404)
+
 // Route function
 const RequestDispatch = (req, res, next) => {
     const id = req.query.id
+    if (typeof id !== 'string' || !id) return groupNotFound(res)
     firestore
         .collection('pendings')
         .doc(id)
         .get()
         .then(doc => {
             if (!doc.exists) {
-                respond(res, new Error('Pas de groupe à cette adresse...'))
+                groupNotFound(res)
                 return
             }
             const group = doc.data()
@@ -135,8 +145,9 @@ const RequestDispatch = (req, res, next) => {
                 .collection('pendings')
                 .doc(id)
                 .delete()
+                .catch(error => console.log(error))
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const DispatchGifters = (req, res, next) => {
@@ -150,7 +161,7 @@ const DispatchGifters = (req, res, next) => {
             req.result = result
             next()
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const SendSecretSantaEmails = (req, res) => {
@@ -163,7 +174,7 @@ const SendSecretSantaEmails = (req, res) => {
     Promise
         .all(secret_santa)
         .then(() => respond(res, { results: true }, 200))
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const CreatePendingGroup = (req, res, next) => {
@@ -183,7 +194,7 @@ const CreatePendingGroup = (req, res, next) => {
             req.body.id = doc.id
             next()
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const getLink = (id) => {
@@ -212,7 +223,7 @@ const SendGroupCreatedEmail = (req, res) => {
 // Returns only what the web app shows: each group's id and name. Members'
 // names and email addresses stay on the server.
 const SearchPendingGroups = (req, res) => {
-    const { text, email } = req.query
+    const { text = '', email = '' } = req.query
     firestore
         .collection('pendings')
         .get()
@@ -224,28 +235,32 @@ const SearchPendingGroups = (req, res) => {
                 .map(group => ({ id: group.id, name: group.name }))
             respond(res, { results: groups }, 200)
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const filterGroup = (group, text, email) => {
-    const isIncluded = group.name.toLowerCase().includes(text.toLowerCase())
+    if (typeof group.name !== 'string' || !Array.isArray(group.users)) return false
+    const isIncluded = group.name.toLowerCase().includes(String(text).toLowerCase())
     return isIncluded && !userIsInPendingGroup(email, group)
 }
 
 const JoinPendingGroup = (req, res, next) => {
     const { id, name, email } = req.body
+    if (typeof id !== 'string' || !id) return groupNotFound(res)
     console.log('Joining pending group...')
+    // update() fails with NOT_FOUND (gRPC code 5) instead of creating an
+    // empty group when the id does not exist.
     firestore
         .collection('pendings')
         .doc(id)
-        .set({
+        .update({
             users: FieldValue.arrayUnion({ name, email })
-        }, { merge: true })
+        })
         .then(() => {
             console.log('Pending group joined')
             next()
         })
-        .catch(error => console.log(error))
+        .catch(error => error.code === 5 ? groupNotFound(res) : fail(res, error))
 }
 
 const SendNewGifterEmail = (req, res) => {
@@ -270,9 +285,9 @@ const SendNewGifterEmail = (req, res) => {
             Promise
                 .all(proms)
                 .then(() => respond(res, { results: true }, 200))
-                .catch(error => console.log(error))
+                .catch(error => fail(res, error))
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const secretSanta = {
@@ -289,7 +304,7 @@ const secretSanta = {
 const publicUrl = process.env.PUBLIC_URL || path.join(__dirname, '../app/build')
 
 const app = express()
-app.use(bodyParser.json({ limit: '50mb' }))
+app.use(bodyParser.json())
     .use((req, res, next) => {
         res.header("Access-Control-Allow-Origin", "*")
         res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")

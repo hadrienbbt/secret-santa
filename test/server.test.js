@@ -189,10 +189,40 @@ test('GET /dispatch draws the exchange, stores it, removes the pending group and
   }
 })
 
-test('GET /dispatch with an unknown id answers with an empty object', { skip }, async () => {
-  const response = await call('GET', '/dispatch?id=unknown')
-  assert.equal(response.status, 200)
-  assert.deepEqual(response.json, {})
+const notFound = { code: 404, status: 'Not Found', message: 'Pas de groupe à cette adresse...' }
+
+test('GET /dispatch with an unknown or missing id answers 404', { skip }, async () => {
+  for (const route of ['/dispatch?id=unknown', '/dispatch']) {
+    const response = await call('GET', route)
+    assert.equal(response.status, 404, route)
+    assert.deepEqual(response.json, notFound)
+  }
+  assert.equal(smtp.messages.length, 0)
+})
+
+test('POST /join to an unknown group answers 404 and stores nothing', { skip }, async () => {
+  for (const id of ['unknown', undefined]) {
+    const response = await call('POST', '/join', { id, name: 'Bob', email: 'bob@example.test' })
+    assert.equal(response.status, 404, String(id))
+    assert.deepEqual(response.json, notFound)
+  }
+  assert.equal((await listCollection('pendings')).length, 0)
+  assert.equal(smtp.messages.length, 0)
+})
+
+test('GET /group without search text or with repeated parameters still answers', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+  for (const route of ['/group', '/group?text=dup&text=ont&email=a&email=b']) {
+    const response = await call('GET', route)
+    assert.equal(response.status, 200, route)
+    assert.deepEqual(response.json.results.map(group => group.id), route === '/group' ? [id] : [])
+  }
+})
+
+test('request bodies over 100 kB are refused', { skip }, async () => {
+  const response = await call('POST', '/pending-group', { groupName: 'x'.repeat(200 * 1024), name: 'Alice', email: 'alice@example.test' })
+  assert.equal(response.status, 413)
+  assert.equal((await listCollection('pendings')).length, 0)
   assert.equal(smtp.messages.length, 0)
 })
 
