@@ -47,6 +47,15 @@ transporter.verify(function (error, success) {
     }
 })
 
+// Names and group names come from the public API, so they are escaped before
+// being put in an HTML email.
+const escapeHtml = value => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+
 const mailOptions = ({ to, html }) => ({
     from: `"Santa 🎅" <${senderEmail}>`,
     to: to,
@@ -148,7 +157,7 @@ const SendSecretSantaEmails = (req, res) => {
     const secret_santa = req.result.map(({ giver, receiver }) =>
         transporter.sendMail(mailOptions({
             to: giver.email,
-            html: '<html>CACHE CET EMAIL <br /> ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄<br /><br />La personne à qui tu vas offrir un cadeau cette année est ... <b>' + receiver.name + '</b> !</html>'
+            html: '<html>CACHE CET EMAIL <br /> ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄<br /><br />La personne à qui tu vas offrir un cadeau cette année est ... <b>' + escapeHtml(receiver.name) + '</b> !</html>'
         }), (error, info) => error ? Promise.reject() : Promise.resolve()))
 
     Promise
@@ -189,7 +198,7 @@ const SendGroupCreatedEmail = (req, res) => {
     const link = getLink(id)
     transporter.sendMail(mailOptions({
         to: email,
-        html: `<html>Bonjour ${name},<br /><br />Ton groupe ${groupName} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !</html>`
+        html: `<html>Bonjour ${escapeHtml(name)},<br /><br />Ton groupe ${escapeHtml(groupName)} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !</html>`
     }), (err, result) => {
         if (err) {
             console.log(err)
@@ -251,11 +260,11 @@ const SendNewGifterEmail = (req, res) => {
             const proms = [
                 transporter.sendMail(mailOptions({
                     to: owner.email,
-                    html: `<html>Bonjour ${owner.name},<br /><br />${name} a bien rejoint le groupe ${group.name}.</html>`
+                    html: `<html>Bonjour ${escapeHtml(owner.name)},<br /><br />${escapeHtml(name)} a bien rejoint le groupe ${escapeHtml(group.name)}.</html>`
                 }), Promise.resolve),
                 transporter.sendMail(mailOptions({
                     to: email,
-                    html: `<html>Bonjour ${name},<br /><br />Tu as bien rejoint le groupe ${group.name}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.</html>`
+                    html: `<html>Bonjour ${escapeHtml(name)},<br /><br />Tu as bien rejoint le groupe ${escapeHtml(group.name)}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.</html>`
                 }), Promise.resolve)
             ]
             Promise

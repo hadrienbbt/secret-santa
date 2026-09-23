@@ -207,6 +207,23 @@ test('POST /group draws the exchange for any list of users it is given', { skip 
   assert.deepEqual(mails.map(mail => mail.to[0]).sort(), ['alice@example.test', 'bob@example.test'])
 })
 
+test('names and group names are escaped in every email', { skip }, async () => {
+  const groupName = '<a href="https://evil.test">Cliquez ici</a>'
+  const id = await createGroup(groupName, '<b>Mallory</b>', 'mallory@example.test')
+  await joinGroup(id, '<img src=x onerror=alert(1)>', 'bob@example.test')
+  await joinGroup(id, "Carol & 'Co'", 'carol@example.test')
+  const dispatched = await call('GET', `/dispatch?id=${id}`)
+  assert.equal(dispatched.status, 200)
+
+  const mails = await smtp.waitFor(8)
+  const bodies = mails.map(mail => mail.body).join('\n')
+  assert.ok(bodies.includes('&lt;a href=&quot;https://evil.test&quot;&gt;Cliquez ici&lt;/a&gt;'), bodies)
+  assert.ok(bodies.includes('&lt;b&gt;Mallory&lt;/b&gt;'), bodies)
+  assert.ok(bodies.includes('&lt;img src=x onerror=alert(1)&gt;'), bodies)
+  assert.ok(bodies.includes('Carol &amp; &#39;Co&#39;'), bodies)
+  assert.doesNotMatch(bodies, /<a href="https:\/\/evil\.test"|<img |<b>Mallory/)
+})
+
 test('security rules deny direct client reads and writes', { skip }, async () => {
   const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
   const url = `${documentsUrl}/pendings/${id}`
