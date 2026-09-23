@@ -196,15 +196,16 @@ test('GET /dispatch with an unknown id answers with an empty object', { skip }, 
   assert.equal(smtp.messages.length, 0)
 })
 
-test('POST /group draws the exchange for any list of users it is given', { skip }, async () => {
+test('POST /group no longer draws an exchange for an arbitrary list of users', { skip }, async () => {
   const users = [
     { id: 'a', name: 'Alice', email: 'alice@example.test' },
     { id: 'b', name: 'Bob', email: 'bob@example.test' },
   ]
   const response = await call('POST', '/group', { users })
-  assert.equal(response.status, 200)
-  const mails = await smtp.waitFor(2)
-  assert.deepEqual(mails.map(mail => mail.to[0]).sort(), ['alice@example.test', 'bob@example.test'])
+  assert.equal(response.status, 404)
+  await new Promise(resolve => setTimeout(resolve, 300))
+  assert.equal(smtp.messages.length, 0)
+  assert.equal((await listCollection('groups')).length, 0)
 })
 
 test('names and group names are escaped in every email', { skip }, async () => {
