@@ -7,11 +7,11 @@
 //   project id starts with "demo-";
 // - the server runs with a throwaway key and a loopback SMTP server;
 // - data is read and reset through emulator-only REST endpoints.
-const { test, before, after, beforeEach } = require('node:test')
-const assert = require('node:assert/strict')
+import { test, before, after, beforeEach } from 'node:test'
+import assert from 'node:assert/strict'
 
-const { startFakeSmtp } = require('./helpers/fake-smtp.js')
-const { startServer } = require('./helpers/server.js')
+import { startFakeSmtp } from './helpers/fake-smtp.js'
+import { startServer } from './helpers/server.js'
 
 const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST
 const projectId = process.env.GCLOUD_PROJECT || 'demo-secret-santa'

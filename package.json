@@ -2,41 +2,23 @@
   "name": "secret-santa",
   "version": "2.1.0",
   "private": true,
-  "main": "index.js",
+  "type": "module",
+  "main": "server/index.js",
   "engines": {
     "node": ">=22.12.0"
   },
   "dependencies": {
     "body-parser": "^1.20.0",
-    "core-js": "^3.21.1",
     "dotenv": "^16.0.0",
     "express": "^4.17.3",
     "firebase-admin": "^14.4.0",
     "nodemailer": "^10.0.10"
   },
   "scripts": {
-    "build": "babel server -d lib",
-    "start": "npm run build && node lib/index.js",
-    "buildall": "npm run build && cd app && npm run build && cd ..",
-    "test": "npm run build && node --test --test-concurrency=1 test/*.test.js",
+    "start": "node server/index.js",
+    "buildall": "cd app && npm run build",
+    "test": "node --test --test-concurrency=1 test/*.test.js",
     "test:emulator": "firebase emulators:exec --only firestore --project demo-secret-santa \"npm test\""
-  },
-  "devDependencies": {
-    "@babel/cli": "^7.17.6",
-    "@babel/core": "^7.17.8",
-    "@babel/preset-env": "^7.16.11"
-  },
-  "browserslist": {
-    "production": [
-      ">0.2%",
-      "not dead",
-      "not op_mini all"
-    ],
-    "development": [
-      "last 1 chrome version",
-      "last 1 firefox version",
-      "last 1 safari version"
-    ]
   },
   "overrides": {
     "gaxios": {
