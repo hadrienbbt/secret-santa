@@ -3,16 +3,18 @@ import 'dotenv/config'
 import http from 'http'
 import https from 'https'
 import fs from 'fs'
+import crypto from 'crypto'
 import express from 'express'
 import bodyParser from 'body-parser'
 import nodemailer from 'nodemailer'
-import admin from 'firebase-admin'
+import { initializeApp, cert } from 'firebase-admin/app'
+import { getFirestore, FieldValue } from 'firebase-admin/firestore'
 import path from 'path'
 
 import respond from './response'
 import serviceAccount from '../.keys/secret-santa-6a7a9-firebase-adminsdk-5frzt-91d5931925.json'
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount)
+initializeApp({
+    credential: cert(serviceAccount)
 })
 
 const domain = process.env.DOMAIN || 'localhost'
@@ -23,8 +25,7 @@ const smtpUser = process.env.SMTP_USER || 'user'
 const smtpPwd = process.env.SMTP_PWD || 'pwd'
 const senderEmail = process.env.SENDER_EMAIL || 'user@example.com'
 
-const firestore = admin.firestore()
-const { FieldValue } = admin.firestore
+const firestore = getFirestore()
 
 const transporter = nodemailer.createTransport({
     host: smtpHost,
@@ -46,6 +47,15 @@ transporter.verify(function (error, success) {
         console.log("SMTP Server ready to send emails");
     }
 })
+
+// Names and group names come from the public API, so they are escaped before
+// being put in an HTML email.
+const escapeHtml = value => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 
 const mailOptions = ({ to, html }) => ({
     from: `"Santa 🎅" <${senderEmail}>`,
@@ -104,19 +114,45 @@ const userIsInPendingGroup = (email, group) => group.users
         acc ? acc : user.email === email
         , false)
 
+// Answers 503 instead of leaving the request hanging when Firestore or
+// another dependency fails, and never answers twice.
+const fail = (res, error) => {
+    console.log(error)
+    if (!res.headersSent) respond(res, 'Service unavailable', 503)
+}
+
+const groupNotFound = res => respond(res, 'Pas de groupe à cette adresse...', 404)
+
+// Compares a token from a link with the stored one in constant time.
+const sameToken = (given, expected) => {
+    if (typeof given !== 'string') return false
+    const a = Buffer.from(given)
+    const b = Buffer.from(expected)
+    return a.length === b.length && crypto.timingSafeEqual(a, b)
+}
+
 // Route function
 const RequestDispatch = (req, res, next) => {
     const id = req.query.id
+    if (typeof id !== 'string' || !id) return groupNotFound(res)
     firestore
         .collection('pendings')
         .doc(id)
         .get()
         .then(doc => {
             if (!doc.exists) {
-                respond(res, new Error('Pas de groupe à cette adresse...'))
+                groupNotFound(res)
                 return
             }
             const group = doc.data()
+            // Group ids are public (the join screen lists them), so a draw
+            // needs the secret token from the owner's email. Groups created
+            // before tokens existed have none; their owners' links only carry
+            // the id, so the id alone still works for them.
+            if (group.dispatchToken && !sameToken(req.query.token, group.dispatchToken)) {
+                groupNotFound(res)
+                return
+            }
             req.body.users = group.users.map(user => {
                 const id = firestore.collection('pendings').doc().id
                 return Object.assign(user, { id })
@@ -126,8 +162,9 @@ const RequestDispatch = (req, res, next) => {
                 .collection('pendings')
                 .doc(id)
                 .delete()
+                .catch(error => console.log(error))
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const DispatchGifters = (req, res, next) => {
@@ -141,20 +178,20 @@ const DispatchGifters = (req, res, next) => {
             req.result = result
             next()
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const SendSecretSantaEmails = (req, res) => {
     const secret_santa = req.result.map(({ giver, receiver }) =>
         transporter.sendMail(mailOptions({
             to: giver.email,
-            html: '<html>CACHE CET EMAIL <br /> ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄<br /><br />La personne à qui tu vas offrir un cadeau cette année est ... <b>' + receiver.name + '</b> !</html>'
+            html: '<html>CACHE CET EMAIL <br /> ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄ ❄<br /><br />La personne à qui tu vas offrir un cadeau cette année est ... <b>' + escapeHtml(receiver.name) + '</b> !</html>'
         }), (error, info) => error ? Promise.reject() : Promise.resolve()))
 
     Promise
         .all(secret_santa)
         .then(() => respond(res, { results: true }, 200))
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const CreatePendingGroup = (req, res, next) => {
@@ -163,33 +200,36 @@ const CreatePendingGroup = (req, res, next) => {
     const doc = firestore
         .collection('pendings')
         .doc()
+    const dispatchToken = crypto.randomBytes(24).toString('hex')
     doc
         .set({
             id: doc.id,
             name: groupName,
-            users: [{ name, email }]
+            users: [{ name, email }],
+            dispatchToken
         })
         .then(() => {
             console.log('Pending group saved')
-            req.body.id = doc.id
+            req.createdGroup = { id: doc.id, dispatchToken }
             next()
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
-const getLink = (id) => {
+const getLink = (id, token) => {
     if (!process.env.NODE_ENV || process.env.NODE_ENV == 'development') {
-        `http://${domain}:${port}/dispatch?id=${id}`
+        `http://${domain}:${port}/dispatch?id=${id}&token=${token}`
     }
-    return `https://${domain}/dispatch?id=${id}`
+    return `https://${domain}/dispatch?id=${id}&token=${token}`
 }
 
 const SendGroupCreatedEmail = (req, res) => {
-    const { id, groupName, name, email } = req.body
-    const link = getLink(id)
+    const { groupName, name, email } = req.body
+    const { id, dispatchToken } = req.createdGroup
+    const link = getLink(id, dispatchToken)
     transporter.sendMail(mailOptions({
         to: email,
-        html: `<html>Bonjour ${name},<br /><br />Ton groupe ${groupName} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !</html>`
+        html: `<html>Bonjour ${escapeHtml(name)},<br /><br />Ton groupe ${escapeHtml(groupName)} a été créé. Tu recevras un mail dès qu'une nouvelle personne rejoindra ce groupe. Lorsque vous serez assez nombreux tu pourras cliquer sur <a href="${link}">ce lien</a> pour que tout le monde reçoive le nom de la personne à qui faire un cadeau.<br />À bientôt !</html>`
     }), (err, result) => {
         if (err) {
             console.log(err)
@@ -200,8 +240,10 @@ const SendGroupCreatedEmail = (req, res) => {
     })
 }
 
+// Returns only what the web app shows: each group's id and name. Members'
+// names and email addresses stay on the server.
 const SearchPendingGroups = (req, res) => {
-    const { text, email } = req.query
+    const { text = '', email = '' } = req.query
     firestore
         .collection('pendings')
         .get()
@@ -210,30 +252,35 @@ const SearchPendingGroups = (req, res) => {
                 .docs
                 .map(doc => doc.data())
                 .filter(group => filterGroup(group, text, email))
+                .map(group => ({ id: group.id, name: group.name }))
             respond(res, { results: groups }, 200)
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const filterGroup = (group, text, email) => {
-    const isIncluded = group.name.toLowerCase().includes(text.toLowerCase())
+    if (typeof group.name !== 'string' || !Array.isArray(group.users)) return false
+    const isIncluded = group.name.toLowerCase().includes(String(text).toLowerCase())
     return isIncluded && !userIsInPendingGroup(email, group)
 }
 
 const JoinPendingGroup = (req, res, next) => {
     const { id, name, email } = req.body
+    if (typeof id !== 'string' || !id) return groupNotFound(res)
     console.log('Joining pending group...')
+    // update() fails with NOT_FOUND (gRPC code 5) instead of creating an
+    // empty group when the id does not exist.
     firestore
         .collection('pendings')
         .doc(id)
-        .set({
+        .update({
             users: FieldValue.arrayUnion({ name, email })
-        }, { merge: true })
+        })
         .then(() => {
             console.log('Pending group joined')
             next()
         })
-        .catch(error => console.log(error))
+        .catch(error => error.code === 5 ? groupNotFound(res) : fail(res, error))
 }
 
 const SendNewGifterEmail = (req, res) => {
@@ -248,19 +295,19 @@ const SendNewGifterEmail = (req, res) => {
             const proms = [
                 transporter.sendMail(mailOptions({
                     to: owner.email,
-                    html: `<html>Bonjour ${owner.name},<br /><br />${name} a bien rejoint le groupe ${group.name}.</html>`
+                    html: `<html>Bonjour ${escapeHtml(owner.name)},<br /><br />${escapeHtml(name)} a bien rejoint le groupe ${escapeHtml(group.name)}.</html>`
                 }), Promise.resolve),
                 transporter.sendMail(mailOptions({
                     to: email,
-                    html: `<html>Bonjour ${name},<br /><br />Tu as bien rejoint le groupe ${group.name}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.</html>`
+                    html: `<html>Bonjour ${escapeHtml(name)},<br /><br />Tu as bien rejoint le groupe ${escapeHtml(group.name)}. Tu recevras un email avec le nom de la personne à qui faire un cadeau prochainement.</html>`
                 }), Promise.resolve)
             ]
             Promise
                 .all(proms)
                 .then(() => respond(res, { results: true }, 200))
-                .catch(error => console.log(error))
+                .catch(error => fail(res, error))
         })
-        .catch(error => console.log(error))
+        .catch(error => fail(res, error))
 }
 
 const secretSanta = {
@@ -277,8 +324,10 @@ const secretSanta = {
 const publicUrl = process.env.PUBLIC_URL || path.join(__dirname, '../app/build')
 
 const app = express()
-app.use(bodyParser.json({ limit: '50mb' }))
+app.disable('x-powered-by')
+app.use(bodyParser.json())
     .use((req, res, next) => {
+        res.header("X-Content-Type-Options", "nosniff")
         res.header("Access-Control-Allow-Origin", "*")
         res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept")
         res.header("Access-Control-Allow-Methods", "DELETE,GET,HEAD,PATCH,POST,PUT,OPTIONS")
@@ -289,7 +338,6 @@ app.use(bodyParser.json({ limit: '50mb' }))
         res.sendFile(path.join(publicUrl, 'index.html'))
     })
     .get('/group', secretSanta.SearchPendingGroups)
-    .post('/group', [secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])
     .post('/join', [secretSanta.JoinPendingGroup, secretSanta.SendNewGifterEmail])
     .post('/pending-group', [secretSanta.CreatePendingGroup, secretSanta.SendGroupCreatedEmail])
     .get('/dispatch', [secretSanta.RequestDispatch, secretSanta.DispatchGifters, secretSanta.SendSecretSantaEmails])

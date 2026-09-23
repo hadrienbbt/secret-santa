@@ -1,0 +1,326 @@
+// End-to-end tests of the server against the Firestore emulator and a local
+// fake SMTP server. They are skipped unless FIRESTORE_EMULATOR_HOST is set;
+// run them with `npm run test:emulator` (needs firebase-tools and Java).
+//
+// They can never reach production or send real email:
+// - they refuse to run unless the emulator is on a loopback address and the
+//   project id starts with "demo-";
+// - the server runs with a throwaway key and a loopback SMTP server;
+// - data is read and reset through emulator-only REST endpoints.
+const { test, before, after, beforeEach } = require('node:test')
+const assert = require('node:assert/strict')
+
+const { startFakeSmtp } = require('./helpers/fake-smtp.js')
+const { startServer } = require('./helpers/server.js')
+
+const emulatorHost = process.env.FIRESTORE_EMULATOR_HOST
+const projectId = process.env.GCLOUD_PROJECT || 'demo-secret-santa'
+const skip = !emulatorHost && 'FIRESTORE_EMULATOR_HOST is not set'
+const documentsUrl = `http://${emulatorHost}/v1/projects/${projectId}/databases/(default)/documents`
+const resetUrl = `http://${emulatorHost}/emulator/v1/projects/${projectId}/databases/(default)/documents`
+const year = new Date().getFullYear()
+
+const decodeValue = value => {
+  if ('stringValue' in value) return value.stringValue
+  if ('integerValue' in value) return Number(value.integerValue)
+  if ('doubleValue' in value) return value.doubleValue
+  if ('booleanValue' in value) return value.booleanValue
+  if ('nullValue' in value) return null
+  if ('arrayValue' in value) return (value.arrayValue.values || []).map(decodeValue)
+  if ('mapValue' in value) return decodeFields(value.mapValue.fields || {})
+  throw new Error(`unexpected Firestore value ${JSON.stringify(value)}`)
+}
+const decodeFields = fields => Object.fromEntries(Object.entries(fields).map(([key, value]) => [key, decodeValue(value)]))
+
+// "Bearer owner" is the emulator's admin credential; it bypasses the rules.
+const listCollection = async name => {
+  const response = await fetch(`${documentsUrl}/${name}?pageSize=300`, { headers: { Authorization: 'Bearer owner' } })
+  assert.equal(response.status, 200)
+  const { documents = [] } = await response.json()
+  return documents.map(doc => ({ docId: doc.name.split('/').pop(), data: decodeFields(doc.fields || {}) }))
+}
+
+const waitUntil = async (condition, message, timeoutMs = 10000) => {
+  const deadline = Date.now() + timeoutMs
+  while (!(await condition())) {
+    if (Date.now() > deadline) throw new Error(`timed out: ${message}`)
+    await new Promise(resolve => setTimeout(resolve, 50))
+  }
+}
+
+let smtp
+let server
+
+const call = async (method, route, body) => {
+  const response = await fetch(`${server.url}${route}`, {
+    method,
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: body && JSON.stringify(body),
+  })
+  const text = await response.text()
+  let json
+  try { json = JSON.parse(text) } catch { json = undefined }
+  return { status: response.status, text, json }
+}
+
+// The dispatch link each owner received by email, by group id.
+const dispatchPaths = {}
+
+const createGroup = async (groupName, name, email) => {
+  const before = smtp.messages.length
+  const response = await call('POST', '/pending-group', { groupName, name, email })
+  assert.equal(response.status, 200, response.text)
+  const mails = await smtp.waitFor(before + 1)
+  const [pending] = (await listCollection('pendings')).filter(doc => doc.data.name === groupName)
+  const link = mails[before].body.match(/https:\/\/secret-santa\.test(\/dispatch\?id=[A-Za-z0-9]+&token=[0-9a-f]+)/)
+  assert.ok(link, mails[before].body)
+  dispatchPaths[pending.docId] = link[1]
+  return pending.docId
+}
+
+const joinGroup = async (id, name, email) => {
+  const before = smtp.messages.length
+  const response = await call('POST', '/join', { id, name, email })
+  assert.equal(response.status, 200, response.text)
+  await smtp.waitFor(before + 2)
+}
+
+before(async () => {
+  if (skip) return
+  assert.match(emulatorHost, /^(127\.0\.0\.1|localhost|\[::1\]):\d+$/, 'the emulator must run on a loopback address')
+  assert.match(projectId, /^demo-/, 'the emulator tests only run against a demo- project')
+  smtp = await startFakeSmtp()
+  server = await startServer({ firestoreHost: emulatorHost, projectId, smtp })
+})
+
+after(async () => {
+  await server?.stop()
+  await smtp?.stop()
+})
+
+beforeEach(async () => {
+  if (skip) return
+  const response = await fetch(resetUrl, { method: 'DELETE' }) // emulator-only reset
+  assert.equal(response.status, 200)
+  smtp.messages.length = 0
+})
+
+test('GET / serves the web app build', { skip }, async () => {
+  const response = await call('GET', '/')
+  assert.equal(response.status, 200)
+  assert.match(response.text, /test build/)
+})
+
+test('POST /pending-group creates a group and emails its owner a dispatch link', { skip }, async () => {
+  const response = await call('POST', '/pending-group', { groupName: 'Famille Dupont', name: 'Alice', email: 'alice@example.test' })
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.json, { results: true })
+
+  const pendings = await listCollection('pendings')
+  assert.equal(pendings.length, 1)
+  const [{ docId, data }] = pendings
+  const { dispatchToken, ...group } = data
+  assert.deepEqual(group, { id: docId, name: 'Famille Dupont', users: [{ name: 'Alice', email: 'alice@example.test' }] })
+  assert.match(dispatchToken, /^[0-9a-f]{48}$/)
+
+  const [mail] = await smtp.waitFor(1)
+  assert.deepEqual(mail.to, ['alice@example.test'])
+  assert.equal(mail.from, 'santa@secret-santa.test')
+  assert.match(mail.headers.subject, new RegExp(`Secret Santa ${year}`))
+  assert.match(mail.body, /Bonjour Alice/)
+  assert.match(mail.body, /Ton groupe Famille Dupont a été créé/)
+  assert.ok(mail.body.includes(`https://secret-santa.test/dispatch?id=${docId}&token=${dispatchToken}`), mail.body)
+})
+
+test('GET /group finds pending groups by name, leaving out groups the user is in', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+
+  const found = await call('GET', '/group?text=dupont&email=bob@example.test')
+  assert.equal(found.status, 200)
+  assert.deepEqual(found.json, { results: [{ id, name: 'Famille Dupont' }] })
+  // Members' names and email addresses must never leave the server.
+  assert.doesNotMatch(found.text, /Alice|alice@example\.test|users|dispatchToken/)
+
+  const member = await call('GET', '/group?text=dupont&email=alice@example.test')
+  assert.deepEqual(member.json, { results: [] })
+
+  const none = await call('GET', '/group?text=martin&email=bob@example.test')
+  assert.deepEqual(none.json, { results: [] })
+})
+
+test('POST /join adds the user and emails both the owner and the new member', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+
+  const response = await call('POST', '/join', { id, name: 'Bob', email: 'bob@example.test' })
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.json, { results: true })
+
+  const [{ data }] = await listCollection('pendings')
+  assert.deepEqual(data.users, [{ name: 'Alice', email: 'alice@example.test' }, { name: 'Bob', email: 'bob@example.test' }])
+
+  const mails = (await smtp.waitFor(3)).slice(1)
+  const toOwner = mails.find(mail => mail.to[0] === 'alice@example.test')
+  const toMember = mails.find(mail => mail.to[0] === 'bob@example.test')
+  assert.match(toOwner.body, /Bonjour Alice,.*Bob a bien rejoint le groupe Famille Dupont/s)
+  assert.match(toMember.body, /Bonjour Bob,.*Tu as bien rejoint le groupe Famille Dupont/s)
+})
+
+test('GET /dispatch draws the exchange, stores it, removes the pending group and emails everyone', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+  await joinGroup(id, 'Bob', 'bob@example.test')
+  await joinGroup(id, 'Carol', 'carol@example.test')
+  smtp.messages.length = 0
+
+  const response = await call('GET', dispatchPaths[id])
+  assert.equal(response.status, 200)
+  assert.deepEqual(response.json, { results: true })
+
+  const groups = await listCollection('groups')
+  assert.equal(groups.length, 1)
+  const { dispatch } = groups[0].data
+  assert.equal(dispatch.length, 3)
+  const names = ['Alice', 'Bob', 'Carol']
+  assert.deepEqual(dispatch.map(pair => pair.giver.name).sort(), names)
+  assert.deepEqual(dispatch.map(pair => pair.receiver.name).sort(), names)
+  for (const { giver, receiver } of dispatch) {
+    assert.notEqual(giver.name, receiver.name)
+    assert.match(giver.id, /^[A-Za-z0-9]{20}$/)
+  }
+
+  await waitUntil(async () => (await listCollection('pendings')).length === 0, 'pending group deleted')
+
+  const mails = await smtp.waitFor(3)
+  for (const { giver, receiver } of dispatch) {
+    const mail = mails.find(m => m.to[0] === giver.email)
+    assert.ok(mail, `no email for ${giver.email}`)
+    assert.ok(mail.body.includes(`<b>${receiver.name}</b>`), mail.body)
+  }
+})
+
+const notFound = { code: 404, status: 'Not Found', message: 'Pas de groupe à cette adresse...' }
+
+test('GET /dispatch with an unknown or missing id answers 404', { skip }, async () => {
+  for (const route of ['/dispatch?id=unknown', '/dispatch']) {
+    const response = await call('GET', route)
+    assert.equal(response.status, 404, route)
+    assert.deepEqual(response.json, notFound)
+  }
+  assert.equal(smtp.messages.length, 0)
+})
+
+test('GET /dispatch needs the secret token from the owner\'s email', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+  await joinGroup(id, 'Bob', 'bob@example.test')
+  smtp.messages.length = 0
+
+  for (const route of [`/dispatch?id=${id}`, `/dispatch?id=${id}&token=${'0'.repeat(48)}`, `/dispatch?id=${id}&token=short`]) {
+    const response = await call('GET', route)
+    assert.equal(response.status, 404, route)
+    assert.deepEqual(response.json, notFound)
+  }
+  assert.equal((await listCollection('pendings')).length, 1)
+  assert.equal((await listCollection('groups')).length, 0)
+  assert.equal(smtp.messages.length, 0)
+
+  const response = await call('GET', dispatchPaths[id])
+  assert.equal(response.status, 200)
+  await smtp.waitFor(2)
+})
+
+test('groups created before dispatch tokens can still be drawn with their id', { skip }, async () => {
+  const user = (name, email) => ({ mapValue: { fields: { name: { stringValue: name }, email: { stringValue: email } } } })
+  const created = await fetch(`${documentsUrl}/pendings?documentId=legacy-group`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer owner', 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: {
+      id: { stringValue: 'legacy-group' },
+      name: { stringValue: 'Groupe de 2023' },
+      users: { arrayValue: { values: [user('Alice', 'alice@example.test'), user('Bob', 'bob@example.test')] } },
+    } }),
+  })
+  assert.equal(created.status, 200)
+
+  const response = await call('GET', '/dispatch?id=legacy-group')
+  assert.equal(response.status, 200)
+  const mails = await smtp.waitFor(2)
+  assert.deepEqual(mails.map(mail => mail.to[0]).sort(), ['alice@example.test', 'bob@example.test'])
+})
+
+test('POST /join to an unknown group answers 404 and stores nothing', { skip }, async () => {
+  for (const id of ['unknown', undefined]) {
+    const response = await call('POST', '/join', { id, name: 'Bob', email: 'bob@example.test' })
+    assert.equal(response.status, 404, String(id))
+    assert.deepEqual(response.json, notFound)
+  }
+  assert.equal((await listCollection('pendings')).length, 0)
+  assert.equal(smtp.messages.length, 0)
+})
+
+test('GET /group without search text or with repeated parameters still answers', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+  for (const route of ['/group', '/group?text=dup&text=ont&email=a&email=b']) {
+    const response = await call('GET', route)
+    assert.equal(response.status, 200, route)
+    assert.deepEqual(response.json.results.map(group => group.id), route === '/group' ? [id] : [])
+  }
+})
+
+test('request bodies over 100 kB are refused', { skip }, async () => {
+  const response = await call('POST', '/pending-group', { groupName: 'x'.repeat(200 * 1024), name: 'Alice', email: 'alice@example.test' })
+  assert.equal(response.status, 413)
+  assert.equal((await listCollection('pendings')).length, 0)
+  assert.equal(smtp.messages.length, 0)
+})
+
+test('POST /group no longer draws an exchange for an arbitrary list of users', { skip }, async () => {
+  const users = [
+    { id: 'a', name: 'Alice', email: 'alice@example.test' },
+    { id: 'b', name: 'Bob', email: 'bob@example.test' },
+  ]
+  const response = await call('POST', '/group', { users })
+  assert.equal(response.status, 404)
+  await new Promise(resolve => setTimeout(resolve, 300))
+  assert.equal(smtp.messages.length, 0)
+  assert.equal((await listCollection('groups')).length, 0)
+})
+
+test('names and group names are escaped in every email', { skip }, async () => {
+  const groupName = '<a href="https://evil.test">Cliquez ici</a>'
+  const id = await createGroup(groupName, '<b>Mallory</b>', 'mallory@example.test')
+  await joinGroup(id, '<img src=x onerror=alert(1)>', 'bob@example.test')
+  await joinGroup(id, "Carol & 'Co'", 'carol@example.test')
+  const dispatched = await call('GET', dispatchPaths[id])
+  assert.equal(dispatched.status, 200)
+
+  const mails = await smtp.waitFor(8)
+  const bodies = mails.map(mail => mail.body).join('\n')
+  assert.ok(bodies.includes('&lt;a href=&quot;https://evil.test&quot;&gt;Cliquez ici&lt;/a&gt;'), bodies)
+  assert.ok(bodies.includes('&lt;b&gt;Mallory&lt;/b&gt;'), bodies)
+  assert.ok(bodies.includes('&lt;img src=x onerror=alert(1)&gt;'), bodies)
+  assert.ok(bodies.includes('Carol &amp; &#39;Co&#39;'), bodies)
+  assert.doesNotMatch(bodies, /<a href="https:\/\/evil\.test"|<img |<b>Mallory/)
+})
+
+test('security rules deny direct client reads and writes', { skip }, async () => {
+  const id = await createGroup('Famille Dupont', 'Alice', 'alice@example.test')
+  const url = `${documentsUrl}/pendings/${id}`
+
+  // No Authorization header: the request is treated like any client on the internet.
+  assert.equal((await fetch(url)).status, 403)
+  assert.equal((await fetch(`${url}?updateMask.fieldPaths=name`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fields: { name: { stringValue: 'changed' } } }),
+  })).status, 403)
+  assert.equal((await fetch(url, { method: 'DELETE' })).status, 403)
+
+  const [{ data }] = await listCollection('pendings')
+  assert.equal(data.name, 'Famille Dupont')
+})
+
+// Runs last: every request above must have been handled without crashing the
+// server or leaving an uncaught error in its log.
+test('the server survived every request', { skip }, async () => {
+  assert.equal(server.child.exitCode, null, server.output())
+  assert.doesNotMatch(server.output(), /TypeError|ReferenceError|Unhandled|uncaught/i, server.output())
+})
